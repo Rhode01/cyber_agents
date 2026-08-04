@@ -1,0 +1,196 @@
+name: cyber-agents
+
+services:
+  # ---------------------------------------------------------------- infra --
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cyberagents}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cyberagents}
+      POSTGRES_DB: ${POSTGRES_DB:-cyberagents}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # -------------------------------------------------------------- backend --
+  # Owns all persistence, all migrations, and pipeline orchestration.
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: cyber-agents/backend:dev
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
+      REDIS_URL: redis://redis:6379/0
+      AI_ENGINE_URL: http://ai-engine:8003
+      CORS_ORIGINS: '["http://localhost:3000"]'
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3).status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # Same image as backend, different command. One place defines backend deps.
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: cyber-agents/backend:dev
+    restart: unless-stopped
+    command: ["arq", "app.worker.settings.WorkerSettings"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
+      REDIS_URL: redis://redis:6379/0
+      AI_ENGINE_URL: http://ai-engine:8003
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.worker.settings.WorkerSettings"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  # ------------------------------------------------------------ ai.engine --
+  # Standalone LangGraph service. Holds no database; talks to backend by HTTP.
+  ai-engine:
+    build:
+      context: .
+      dockerfile: ai.engine/Dockerfile
+    image: cyber-agents/ai-engine:dev
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8003/health", timeout=3).status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # ------------------------------------------------------------- frontend --
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
+    image: cyber-agents/frontend:dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # ------------------------------------------------------------ mcpserver --
+  mcpserver:
+    build:
+      context: ./mcpserver
+    image: cyber-agents/mcpserver:dev
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8004"
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "8004:8004"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8004/health", timeout=3).status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+volumes:
+  pgdata:
+  redisdata:

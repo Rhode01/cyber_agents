@@ -1,0 +1,32 @@
+# Secrets and local environment
+.env
+.env.local
+*.pem
+*.key
+
+# Python - each module keeps its own in-project virtualenv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.pnpm-store/
+next-env.d.ts
+*.tsbuildinfo
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+# pnpm 11 reads its settings from here rather than a "pnpm" field in
+# package.json. Both packages below have native build steps that Next.js needs:
+# sharp for image optimisation, unrs-resolver for the eslint import resolver.
+allowBuilds:
+  sharp: true
+  unrs-resolver: true

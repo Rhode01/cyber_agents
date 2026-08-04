@@ -1,0 +1,87 @@
+[project]
+name = "ai-engine"
+version = "0.1.0"
+description = "Standalone LangGraph detection agents. Holds no database; talks to the backend over HTTP."
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "fastapi>=0.141.1,<0.142.0",
+    "uvicorn[standard]>=0.52.1,<0.53.0",
+    "langchain>=1.3.14,<2.0.0",
+    "langchain-core>=1.5.3,<2.0.0",
+    "langchain-openai>=1.4.1,<2.0.0",
+    "langgraph>=1.2.10,<2.0.0",
+    "pydantic>=2.13.4,<3.0.0",
+    "pydantic-settings>=2.14.2,<3.0.0",
+    "httpx>=0.28.1,<0.29.0",
+    "structlog>=26.1.0,<27.0.0",
+    "cyberagents-contracts",
+]
+
+# There are deliberately NO database libraries here. No sqlalchemy, no asyncpg,
+# no alembic, no psycopg. tests/test_no_database_imports.py enforces it.
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.dependencies]
+# Same shared contract as the backend, installed into THIS module's own venv.
+cyberagents-contracts = { path = "../contracts", develop = true }
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.16.1"
+mypy = "^2.3.0"
+pytest = "^9.1.1"
+pytest-asyncio = "^1.4.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# ------------------------------------------------------------------- ruff --
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "ANN", "ASYNC", "S", "RUF"]
+ignore = [
+    "ANN401", # Any is deliberate where LangGraph hands back untyped state.
+    "S104",   # Binding 0.0.0.0 is intentional inside containers.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "ANN201"]
+
+# ------------------------------------------------------------------- mypy --
+# Our own code is checked strictly. The LangChain and LangGraph surface is
+# treated as untyped on purpose: its generic parameters move between minor
+# releases, and a scaffold should not be pinned to that churn.
+
+[tool.mypy]
+python_version = "3.12"
+files = ["ai_engine", "tests"]
+strict = true
+warn_unused_ignores = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["langchain.*", "langchain_core.*", "langchain_openai.*", "langgraph.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+# Tool bodies stay fully annotated; only LangChain's @tool decorator itself is
+# opaque here, which is a consequence of the skip above rather than our code.
+module = ["ai_engine.agents.*.tools"]
+disallow_untyped_decorators = false
+
+# ----------------------------------------------------------------- pytest --
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# package-mode is false, so put the module root on sys.path explicitly.
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

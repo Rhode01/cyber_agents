@@ -1,0 +1,21 @@
+# Root build context is used by backend/ and ai.engine/ so they can consume the
+# contracts/ path dependency. Keep the context small.
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/node_modules/
+**/.next/
+**/out/
+**/.git/
+**/.gitignore
+.env
+.env.*
+!.env.example
+frontend/
+README.md
+Makefile
+docker-compose.yml
+scripts/

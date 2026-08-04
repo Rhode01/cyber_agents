@@ -1,0 +1,20 @@
+# Normalise line endings. Without this, a Windows checkout gives the shell
+# scripts CRLF and they fail inside the Linux containers with "bad interpreter".
+* text=auto eol=lf
+
+*.sh        text eol=lf
+Makefile    text eol=lf
+Dockerfile  text eol=lf
+*.py        text eol=lf
+*.toml      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+# PowerShell keeps CRLF, which is what Windows tooling expects.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Lockfiles are generated: keep diffs quiet in review.
+poetry.lock    linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
