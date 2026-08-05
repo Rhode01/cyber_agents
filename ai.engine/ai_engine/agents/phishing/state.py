@@ -10,14 +10,13 @@ from ai_engine.agents.common.state import AgentState
 class PhishingState(AgentState):
     """Phishing-specific working state.
 
-    These keys are NotRequired because the router seeds only the base state and
-    ``normalize`` is what fills them in.
-
-    TODO(phase-2): populated by real MIME parsing, URL extraction, and
-    SPF/DKIM/DMARC evaluation.
+    Phase 2: ``parsed_email`` holds the structured MIME output.
+    ``rule_hits`` are deterministic flags from the rule_check node.
+    ``verdict`` and ``explanation`` are from the LLM or rules.
     """
 
-    headers: NotRequired[dict[str, str]]
-    urls: NotRequired[list[str]]
-    domains: NotRequired[list[str]]
-    auth_results: NotRequired[dict[str, Any]]
+    parsed_email: dict[str, Any]
+    rule_hits: list[str]
+    verdict: str | None
+    explanation: str | None
+    raw_findings: NotRequired[list[dict[str, Any]]]

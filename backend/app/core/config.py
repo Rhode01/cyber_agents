@@ -37,7 +37,9 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------------------ ai.engine --
     ai_engine_url: str = "http://localhost:8003"
-    ai_engine_timeout_seconds: float = Field(default=60.0, gt=0)
+    # Agents can launch live scans (nmap, nuclei) against a target, so a run
+    # legitimately takes minutes rather than seconds.
+    ai_engine_timeout_seconds: float = Field(default=300.0, gt=0)
 
     # ----------------------------------------------------------------- http --
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])

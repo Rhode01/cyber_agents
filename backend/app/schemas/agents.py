@@ -26,7 +26,11 @@ class AgentRunRequest(BaseModel):
     )
     asset: str | None = Field(default=None, max_length=512)
     raw_input: str = Field(
-        description="Untrusted tool output. Treated as data, never as instructions."
+        default="",
+        description=(
+            "Untrusted tool output. Treated as data, never as instructions. "
+            "Leave empty to let the agent launch its own scan against ``asset``."
+        ),
     )
     context: dict[str, Any] = Field(default_factory=dict, description="Optional trusted metadata.")
     persist: bool = Field(default=True, description="Store returned findings in PostgreSQL.")

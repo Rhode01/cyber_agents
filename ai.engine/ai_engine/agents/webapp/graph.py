@@ -1,9 +1,11 @@
 """The web application security StateGraph.
 
-Built through ``agents.common.graph``; see ``agents.vulnerability.graph`` for the
-same shape wired explicitly.
+MVP shape:
 
-    START -> normalize -> reason -> emit_findings -> END
+    START -> scan -> normalize -> categorize -> reason -> emit_findings -> END
+
+The ``scan`` node launches a Nuclei scan against the analyst's target URL when
+no scanner report is supplied.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from ai_engine.agents.common.graph import build_linear_graph
-from ai_engine.agents.webapp.nodes import emit_findings, normalize, reason
+from ai_engine.agents.webapp.nodes import categorize, emit_findings, normalize, reason, scan
 from ai_engine.agents.webapp.state import WebappState
 
 
@@ -19,7 +21,13 @@ def build_graph() -> Any:
     """Build and compile the web application security graph."""
     return build_linear_graph(
         WebappState,
-        [("normalize", normalize), ("reason", reason), ("emit_findings", emit_findings)],
+        [
+            ("scan", scan),
+            ("normalize", normalize),
+            ("categorize", categorize),
+            ("reason", reason),
+            ("emit_findings", emit_findings),
+        ],
     )
 
 

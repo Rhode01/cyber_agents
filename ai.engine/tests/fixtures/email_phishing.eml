@@ -1,0 +1,43 @@
+From: "PayPal Security Team" <security@paypa1-verify.com>
+To: victim@example.com
+Subject: URGENT: Your PayPal account has been suspended - Act Now
+Date: Tue, 05 Aug 2026 08:00:00 +0000
+Message-ID: <phish001@paypa1-verify.com>
+Reply-To: support@paypa1-recover.net
+MIME-Version: 1.0
+Authentication-Results: mx.example.com;
+    spf=fail (domain of paypa1-verify.com does not designate as permitted sender) smtp.mailfrom=security@paypa1-verify.com;
+    dkim=fail header.d=paypa1-verify.com;
+    dmarc=fail (p=REJECT) header.from=paypa1-verify.com
+Content-Type: multipart/alternative; boundary="boundary001"
+
+--boundary001
+Content-Type: text/plain; charset="utf-8"
+
+Dear PayPal Customer,
+
+Your account has been suspended due to unusual activity detected on your account.
+
+You must verify your account immediately or it will be permanently closed within 24 hours.
+
+Click here to restore access: http://paypa1-verify.com/login?token=abc123
+
+Failure to act will result in permanent account closure.
+
+PayPal Security Team
+
+--boundary001
+Content-Type: text/html; charset="utf-8"
+
+<html>
+<body>
+<p>Dear PayPal Customer,</p>
+<p>Your <strong>PayPal</strong> account has been <strong>suspended</strong> due to <em>unusual activity</em>.</p>
+<p>You must <strong>verify your account immediately</strong> or it will be permanently closed <strong>within 24 hours</strong>.</p>
+<p><a href="http://paypa1-verify.com/login?token=abc123">Click here to restore access</a></p>
+<p>Failure to act will result in permanent account closure.</p>
+<p>PayPal Security Team</p>
+</body>
+</html>
+
+--boundary001--

@@ -14,6 +14,8 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
+from langchain_anthropic import ChatAnthropic
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
 from ai_engine.core.config import get_settings
@@ -26,40 +28,73 @@ class LlmNotConfiguredError(RuntimeError):
     """No API key is present, so a live call could not succeed."""
 
 
-@lru_cache
-def get_chat_model() -> ChatOpenAI:
-    """Return the shared chat model, constructing it on first use.
-
-    Constructing without a key is allowed on purpose - it keeps import and
-    startup free of credentials. ``require_configured_chat_model`` is the
-    accessor to use once a phase actually calls the model.
-    """
-    settings = get_settings()
-
-    model = ChatOpenAI(
-        model=settings.openai_model,
-        api_key=settings.openai_api_key or "not-configured",
-        base_url=settings.resolved_base_url,
-        temperature=settings.openai_temperature,
-        timeout=settings.openai_timeout_seconds,
-        max_retries=settings.openai_max_retries,
-    )
-
+@lru_cache(maxsize=4)
+def get_chat_model(
+    provider: str,
+    api_key: str,
+    model_name: str,
+    base_url: str | None = None,
+    temperature: float = 0.0,
+    max_retries: int = 2,
+    timeout: float = 60.0
+) -> BaseChatModel:
+    """Return the shared chat model, constructing it on first use."""
+    if provider == "anthropic":
+        logger.info(
+            "llm.constructed",
+            provider="anthropic",
+            model=model_name,
+            base_url=base_url or "anthropic-default",
+        )
+        return ChatAnthropic(
+            model=model_name,
+            api_key=api_key or "not-configured",
+            anthropic_api_url=base_url if base_url else None,
+            temperature=temperature,
+            max_retries=max_retries,
+            default_request_timeout=timeout,
+        )
+    
+    # Fallback to OpenAI
     logger.info(
         "llm.constructed",
-        model=settings.openai_model,
-        base_url=settings.resolved_base_url or "openai-default",
-        configured=settings.llm_is_configured,
+        provider="openai",
+        model=model_name,
+        base_url=base_url or "openai-default",
     )
-    return model
+    return ChatOpenAI(
+        model=model_name,
+        api_key=api_key or "not-configured",
+        base_url=base_url,
+        temperature=temperature,
+        timeout=timeout,
+        max_retries=max_retries,
+    )
 
 
-def require_configured_chat_model() -> ChatOpenAI:
+def require_configured_chat_model(context: dict[str, str] | None = None) -> BaseChatModel:
     """Return the chat model, refusing if no credentials are present."""
-    if not get_settings().llm_is_configured:
-        msg = "OPENAI_API_KEY is not set, so the ai.engine cannot call the model"
+    settings = get_settings()
+    ctx = context or {}
+    
+    provider = ctx.get("llm_provider", "openai")
+    api_key = ctx.get("llm_api_key") or ctx.get("openai_api_key") or settings.openai_api_key
+    model_name = ctx.get("llm_model") or settings.openai_model
+    base_url = ctx.get("llm_base_url") or settings.resolved_base_url
+    
+    if not api_key:
+        msg = "LLM API KEY is not set, so the ai.engine cannot call the model"
         raise LlmNotConfiguredError(msg)
-    return get_chat_model()
+        
+    return get_chat_model(
+        provider=provider,
+        api_key=api_key,
+        model_name=model_name,
+        base_url=base_url,
+        temperature=settings.openai_temperature,
+        max_retries=settings.openai_max_retries,
+        timeout=settings.openai_timeout_seconds
+    )
 
 
 def describe_model() -> dict[str, Any]:

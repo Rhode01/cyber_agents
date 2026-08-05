@@ -10,14 +10,12 @@ from ai_engine.agents.common.state import AgentState
 class NetworkState(AgentState):
     """Network-specific working state.
 
-    These keys are NotRequired because the router seeds only the base state and
-    ``normalize`` is what fills them in.
-
-    TODO(phase-2): populated by real NetFlow / Zeek / Suricata parsing and
-    baseline comparison.
+    Phase 2: ``metrics`` contains parsed flow statistics.
+    ``anomalies`` contains rule-based detections (DNS flood, port scan).
     """
 
-    flows: NotRequired[list[dict[str, Any]]]
-    top_talkers: NotRequired[list[dict[str, Any]]]
-    alerts: NotRequired[list[dict[str, Any]]]
-    baseline_deviation: NotRequired[dict[str, Any]]
+    metrics: dict[str, Any]
+    anomalies: list[dict[str, Any]]
+    traffic_window_seconds: int
+    raw_findings: NotRequired[list[dict[str, Any]]]
+    parsed_data: NotRequired[list[Any]]  # temporary key passed to detect

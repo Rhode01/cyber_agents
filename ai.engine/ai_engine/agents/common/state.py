@@ -7,7 +7,7 @@ through ``wrap_untrusted``.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from cyberagents_contracts import FindingCreate
 from langchain_core.messages import AnyMessage
@@ -26,6 +26,10 @@ class AgentState(TypedDict):
     # ---- working state, written by nodes ------------------------------------
     normalized: dict[str, Any]
     messages: Annotated[list[AnyMessage], add_messages]
+
+    # Populated by the ``scan`` node when the agent launches its own scanner.
+    # Records the tool used, whether it succeeded, and the raw output length.
+    scan_info: NotRequired[dict[str, Any]]
 
     # ---- output ------------------------------------------------------------
     findings: list[FindingCreate]

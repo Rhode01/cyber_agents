@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 
 import { fetchBackendHealth, fetchFindings } from '@/lib/api'
-import type { BackendHealth, Finding, Severity } from '@/lib/types'
+import type { AgentTraceEntry, BackendHealth, Finding, Severity } from '@/lib/types'
 
 type HealthState =
   | { kind: 'loading' }
@@ -131,7 +131,7 @@ export default function Home() {
 
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.75rem' }}>
         <Link href="/run" className="btn btn-primary">
-          ▶ Run Pipeline
+          ▶ Run Agent
         </Link>
         <Link href="/findings" className="btn">
           View Findings
@@ -289,7 +289,7 @@ export default function Home() {
                     <AgentChip agent={f.agent} />
                   </div>
                   <div style={{ padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)', maxHeight: '250px', overflowY: 'auto' }}>
-                    {(f.evidence.agent_trace as any[]).map((trace: any, idx: number) => (
+                    {(f.evidence.agent_trace as AgentTraceEntry[]).map((trace, idx) => (
                       <div key={idx} style={{ marginBottom: '0.5rem' }}>
                         {trace.type === 'tool_call' ? (
                           <div style={{ color: 'var(--ok)' }}>

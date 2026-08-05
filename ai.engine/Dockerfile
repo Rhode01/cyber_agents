@@ -27,6 +27,21 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/src/ai.engine/.venv/bin:${PATH}"
 
+# Scanners the agents launch themselves (MVP): nmap for hosts, nuclei for web
+# apps, dig/curl for phishing URL checks. The test hosts used by the agents are
+# safe, but the platform is a scanning tool by design.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        nmap \
+        dnsutils \
+        curl \
+        unzip \
+        ca-certificates \
+    && NUCLEI_VER="$(curl -fsSL https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | tr -d '\n' | sed -n 's/.*"tag_name":"v\([^"]*\)".*/\1/p')" \
+    && curl -fsSL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_amd64.zip" -o /tmp/nuclei.zip \
+    && unzip -o /tmp/nuclei.zip -d /usr/local/bin \
+    && rm -f /tmp/nuclei.zip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app && useradd --system --gid app --home-dir /src app
 
 WORKDIR /src/ai.engine

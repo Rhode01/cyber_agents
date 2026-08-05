@@ -31,10 +31,12 @@ class AnalyzeRequest(BaseModel):
         default=None, max_length=512, description="Affected host, URL, or message id."
     )
     raw_input: str = Field(
+        default="",
         description=(
             "Untrusted tool output. Fenced by the agent before it reaches a prompt "
-            "and never treated as instructions."
-        )
+            "and never treated as instructions. Leave empty to let the agent launch "
+            "its own scan against ``asset``."
+        ),
     )
     context: dict[str, Any] = Field(
         default_factory=dict, description="Trusted metadata supplied by the backend."

@@ -31,19 +31,21 @@ def test_server_is_named_from_settings() -> None:
     assert mcp.name == Settings().mcp_server_name
 
 
-async def test_one_tool_is_registered() -> None:
+async def test_all_tools_are_registered() -> None:
     tools = await mcp.list_tools()
     names = {tool.name for tool in tools}
 
     assert "describe_platform" in names
+    assert "list_findings" in names
+    assert "get_finding" in names
+    assert "summarize_findings" in names
+    assert "run_agent" in names
 
 
-def test_describe_platform_lists_every_agent() -> None:
-    # @mcp.tool() registers the function and hands the original back, so it stays
-    # directly callable.
-    described = describe_platform()
+async def test_describe_platform_lists_every_agent() -> None:
+    described = await describe_platform()
 
-    assert described["phase"] == 1
+    assert described["phase"] == 2
     assert set(described["agents"]) == {"vulnerability", "phishing", "network", "webapp"}
 
 

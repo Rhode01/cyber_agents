@@ -5,7 +5,7 @@
  * browser can reach - localhost:8000, not the compose service name.
  */
 
-import type { BackendHealth, FindingList } from '@/lib/types'
+import type { BackendHealth, Finding, FindingList, FindingSummary, AgentRunRequest, AgentRunResponse, AgentKind, Setting } from '@/lib/types'
 
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
 
@@ -25,7 +25,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${BACKEND_URL}${path}`, {
       ...init,
-      headers: { accept: 'application/json', ...init?.headers },
+      headers: { 
+        accept: 'application/json',
+        'Content-Type': init?.body ? 'application/json' : undefined,
+        ...init?.headers 
+      } as HeadersInit,
       cache: 'no-store',
     })
   } catch {
@@ -36,7 +40,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    throw new ApiError(`Backend responded ${response.status} for ${path}`, response.status)
+    let detail = `Backend responded ${response.status} for ${path}`
+    try {
+      const errBody = await response.json()
+      if (errBody.detail) detail = String(errBody.detail)
+    } catch {}
+    throw new ApiError(detail, response.status)
+  }
+
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return {} as T
   }
 
   return (await response.json()) as T
@@ -48,4 +62,34 @@ export function fetchBackendHealth(): Promise<BackendHealth> {
 
 export function fetchFindings(limit = 20): Promise<FindingList> {
   return request<FindingList>(`/findings?limit=${limit}`)
+}
+
+export function fetchFindingById(id: string): Promise<Finding> {
+  return request<Finding>(`/findings/${id}`)
+}
+
+export function deleteFinding(id: string): Promise<void> {
+  return request<void>(`/findings/${id}`, { method: 'DELETE' })
+}
+
+export function fetchFindingSummary(asset: string): Promise<FindingSummary> {
+  return request<FindingSummary>(`/findings/summary?asset=${encodeURIComponent(asset)}`)
+}
+
+export function runAgent(agent: AgentKind, payload: AgentRunRequest): Promise<AgentRunResponse> {
+  return request<AgentRunResponse>(`/agents/${agent}/run`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function fetchSettings(): Promise<Setting[]> {
+  return request<Setting[]>('/settings')
+}
+
+export function updateSetting(key: string, value: string): Promise<Setting> {
+  return request<Setting>('/settings', {
+    method: 'POST',
+    body: JSON.stringify({ key, value }),
+  })
 }

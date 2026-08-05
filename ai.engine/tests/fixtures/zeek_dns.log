@@ -1,0 +1,20 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	dns
+#open	2026-08-05-10-00-00
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	trans_id	rtt	query	qclass	qclass_name	qtype	qtype_name	rcode	rcode_name	AA	TC	RD	RA	Z	answers	TTLs	rejected
+#types	time	string	addr	port	addr	port	enum	count	interval	string	count	string	count	string	count	string	bool	bool	bool	bool	count	vector[string]	vector[interval]	bool
+1722819600.100000	CbOQHD1234abc	192.168.1.100	54321	8.8.8.8	53	udp	12345	0.001	example.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	93.184.216.34	300.000000	F
+1722819600.200000	CbOQHD1234abd	192.168.1.101	54322	8.8.8.8	53	udp	12346	0.002	randomabc123.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.250000	CbOQHD1234abe	192.168.1.102	54323	8.8.8.8	53	udp	12347	0.002	randomxyz456.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.300000	CbOQHD1234abf	192.168.1.103	54324	8.8.8.8	53	udp	12348	0.002	randomqwe789.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.350000	CbOQHD1234abg	192.168.1.104	54325	8.8.8.8	53	udp	12349	0.002	randomrty012.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.400000	CbOQHD1234abh	192.168.1.105	54326	8.8.8.8	53	udp	12350	0.003	randomuio345.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.450000	CbOQHD1234abi	192.168.1.100	54327	8.8.8.8	53	udp	12351	0.002	randompas678.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.500000	CbOQHD1234abj	192.168.1.101	54328	8.8.8.8	53	udp	12352	0.002	randomdfg901.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.550000	CbOQHD1234abk	192.168.1.102	54329	8.8.8.8	53	udp	12353	0.002	randomhjk234.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.600000	CbOQHD1234abl	192.168.1.103	54330	8.8.8.8	53	udp	12354	0.002	randomlmn567.evil.com	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	F	0	-	-	F
+1722819600.650000	CbOQHD1234abm	192.168.1.104	54331	8.8.8.8	53	udp	12355	0.003	google.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	142.250.185.46	300.000000	F
+#close	2026-08-05-10-01-00

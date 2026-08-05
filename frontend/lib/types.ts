@@ -17,6 +17,14 @@ export interface BackendHealth {
   app_env: string
 }
 
+export interface AgentTraceEntry {
+  type: 'tool_call' | 'tool_result'
+  tool?: string
+  args?: unknown
+  tool_call_id?: string
+  result?: string
+}
+
 export interface Finding {
   id: string
   agent: AgentKind
@@ -39,4 +47,35 @@ export interface FindingList {
   total: number
   limit: number
   offset: number
+}
+
+export interface FindingSummary {
+  asset: string
+  count: number
+  severities: Record<string, number>
+  findings: Finding[]
+}
+
+export interface AgentRunRequest {
+  source: string
+  asset?: string | null
+  /** Optional untrusted tool output. When omitted, the agent launches its own scan against `asset`. */
+  raw_input?: string
+  context?: Record<string, unknown>
+  persist?: boolean
+  background?: boolean
+}
+
+export interface AgentRunResponse {
+  agent: AgentKind
+  mode: 'inline' | 'background'
+  persisted: boolean
+  job_id?: string | null
+  findings: Finding[]
+}
+
+export interface Setting {
+  key: string
+  value: string
+  description?: string | null
 }

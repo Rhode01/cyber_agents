@@ -27,7 +27,9 @@ def test_factory_constructs_a_chat_openai_from_the_environment(
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
 
-    model = get_chat_model()
+    model = get_chat_model(
+        provider="openai", api_key="sk-test-not-a-real-key", model_name="gpt-4.1-mini"
+    )
 
     assert isinstance(model, ChatOpenAI)
     assert model.model_name == "gpt-4.1-mini"
@@ -54,7 +56,12 @@ def test_base_url_can_be_overridden_without_touching_code(
 def test_model_is_cached_across_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
 
-    assert get_chat_model() is get_chat_model()
+    kwargs = {
+        "provider": "openai",
+        "api_key": "sk-test-not-a-real-key",
+        "model_name": "gpt-4.1-mini",
+    }
+    assert get_chat_model(**kwargs) is get_chat_model(**kwargs)
 
 
 def test_construction_succeeds_without_a_key_but_calling_is_refused(
@@ -63,7 +70,10 @@ def test_construction_succeeds_without_a_key_but_calling_is_refused(
     monkeypatch.setenv("OPENAI_API_KEY", "")
 
     # Constructing is allowed: startup must not require credentials.
-    assert isinstance(get_chat_model(), ChatOpenAI)
+    assert isinstance(
+        get_chat_model(provider="openai", api_key="", model_name="gpt-4.1-mini"),
+        ChatOpenAI,
+    )
     assert describe_model()["configured"] is False
 
     with pytest.raises(LlmNotConfiguredError):

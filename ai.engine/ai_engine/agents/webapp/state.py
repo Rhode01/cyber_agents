@@ -10,14 +10,11 @@ from ai_engine.agents.common.state import AgentState
 class WebappState(AgentState):
     """Web-application-specific working state.
 
-    These keys are NotRequired because the router seeds only the base state and
-    ``normalize`` is what fills them in.
-
-    TODO(phase-2): populated by real ZAP and Nuclei report parsing and OWASP
-    Top 10 classification.
+    Phase 2: ``parsed_alerts`` holds the structured output from ZAP or Nuclei.
+    ``owasp_categories`` maps OWASP Top 10 categories to the alerts that fall under them.
     """
 
-    target_url: NotRequired[str | None]
-    endpoints: NotRequired[list[dict[str, Any]]]
-    alerts: NotRequired[list[dict[str, Any]]]
-    owasp_categories: NotRequired[list[str]]
+    target_url: str | None
+    parsed_alerts: list[dict[str, Any]]
+    owasp_categories: dict[str, list[dict[str, Any]]]
+    raw_findings: NotRequired[list[dict[str, Any]]]

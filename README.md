@@ -87,17 +87,90 @@ Because of the path dependency, the backend and ai.engine Docker builds use the
 
 ## Prerequisites
 
-| Tool | Version | Notes |
+| Tool | Min Version | Required for |
 | --- | --- | --- |
-| Python | **3.12+** | `py -3.12` on Windows |
-| Poetry | 2.x | `pipx install poetry` |
-| Node.js | ≥ 20.9 | |
-| pnpm | 11.x | `corepack enable pnpm`, or `npm i -g pnpm` |
-| Docker + Compose | any recent | needed for `make up` only |
-| GNU make | 4.x | `winget install ezwinports.make` on Windows |
+| Python | **3.12+** | backend, ai.engine, mcpserver, contracts |
+| Poetry | **2.x** | all Python modules (dependency management) |
+| Node.js | **≥ 20.9** | frontend |
+| pnpm | **11.x** | frontend |
+| Docker + Compose v2 | any recent | `make up` (PostgreSQL, Redis, all services) |
+| GNU make | **4.x** | all `make *` targets |
 
-On Windows, open a **new** shell after installing these - the installers extend
-`PATH` and an already-open session will not see `poetry`, `pnpm`, or `make`.
+### Install on Debian / Kali / Ubuntu Linux
+
+**Python 3.12+**
+```bash
+sudo apt-get install -y python3 python3-pip python3-venv
+python3 --version   # must be ≥ 3.12
+```
+
+**Poetry 2.x** (official installer — do NOT use `apt`, it ships an old version)
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+# Add Poetry to PATH (add this line to ~/.bashrc or ~/.zshrc too)
+export PATH="$HOME/.local/bin:$PATH"
+poetry --version   # should print Poetry (version 2.x.x)
+```
+
+**Node.js ≥ 20.9** (via NodeSource)
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version   # must be ≥ 20.9
+```
+
+**pnpm 11.x**
+```bash
+corepack enable pnpm
+pnpm --version
+# Or if corepack is unavailable:
+npm install -g pnpm@11
+```
+
+**Docker + Compose v2**
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+# Allow running docker without sudo (requires logout/login to take effect):
+sudo usermod -aG docker $USER
+newgrp docker   # activate the group in the current session without logout
+docker --version
+docker compose version
+```
+
+**GNU make**
+```bash
+sudo apt-get install -y make
+make --version   # must be ≥ 4.x
+```
+
+### Install on Windows
+
+Open PowerShell as Administrator:
+
+```powershell
+# Python
+winget install Python.Python.3.12
+
+# Poetry
+(Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
+
+# Node.js
+winget install OpenJS.NodeJS.LTS
+
+# pnpm
+corepack enable pnpm
+
+# Docker Desktop (includes Compose v2)
+winget install Docker.DockerDesktop
+
+# GNU make
+winget install ezwinports.make
+```
+
+> **Important:** Open a **new** shell after installing — the installers extend
+> `PATH` and an already-open session will not see `poetry`, `pnpm`, or `make`.
 
 ---
 
