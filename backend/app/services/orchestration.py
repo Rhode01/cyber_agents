@@ -29,14 +29,21 @@ def to_model(finding: FindingCreate) -> FindingModel:
     """
     return FindingModel(
         agent=finding.agent.value,
+        finding_type=finding.finding_type.value,
         title=finding.title,
         description=finding.description,
         severity=finding.severity.value,
         confidence=finding.confidence,
         source=finding.source,
         asset=finding.asset,
+        service=finding.service,
+        port=finding.port,
+        protocol=finding.protocol,
+        cve_ids=list(finding.cve_ids),
         evidence=finding.evidence,
         recommendation=finding.recommendation,
+        status=finding.status.value,
+        scan_id=finding.scan_id,
         raw_reference=finding.raw_reference,
         detected_at=finding.detected_at,
     )

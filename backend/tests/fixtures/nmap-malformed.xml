@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Truncated mid-element, as if the upload were cut short. -->
+<nmaprun scanner="nmap" args="nmap -sV -oX -" start="1785312000" version="7.94">
+  <host>
+    <status state="up" reason="echo-reply"/>
+    <address addr="10.0.0.5" addrtype="ipv4"/>
+    <ports>
+      <port protocol="tcp" portid="22">
+        <state state="open" reason="syn-ack"/>
+        <service name="ssh" product="OpenSSH" version="7.4

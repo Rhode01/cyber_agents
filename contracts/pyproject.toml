@@ -1,6 +1,6 @@
 [project]
 name = "cyberagents-contracts"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shared service-to-service contract between backend and ai.engine."
 requires-python = ">=3.12,<4.0"
 dependencies = ["pydantic>=2.13.4,<3.0.0"]

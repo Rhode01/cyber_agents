@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from cyberagents_contracts import AgentKind, FindingCreate, Severity
+from cyberagents_contracts import AgentKind, FindingCreate, FindingType, Severity
 
 from ai_engine.agents.common.untrusted import preview
 
@@ -25,6 +25,9 @@ def placeholder_finding(
     """Build a contract-shaped finding that carries no detection claim."""
     return FindingCreate(
         agent=agent,
+        # A placeholder asserts nothing about the artifact, so it is informational
+        # by construction - not a weak claim about a real problem.
+        finding_type=FindingType.informational,
         title=f"Phase 1 placeholder: {agent.value} agent reached",
         description=(
             f"{summary} The {agent.value} agent graph ran end to end and returned this "

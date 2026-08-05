@@ -10,14 +10,20 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from cyberagents_contracts import AgentKind, Severity
+from cyberagents_contracts import AgentKind, FindingType, Severity
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.api.deps import SessionDep
 from app.core.security import CurrentPrincipal
 from app.models.finding import Finding as FindingModel
-from app.schemas.finding import FindingBatchCreate, FindingCreate, FindingList, FindingRead
+from app.schemas.finding import (
+    FindingBatchCreate,
+    FindingCreate,
+    FindingList,
+    FindingRead,
+    FindingStatusUpdate,
+)
 from app.services.orchestration import persist_findings
 
 router = APIRouter(prefix="/findings", tags=["findings"])
@@ -63,6 +69,8 @@ async def list_findings(
     principal: CurrentPrincipal,
     agent: Annotated[AgentKind | None, Query(description="Filter by producing agent.")] = None,
     severity: Annotated[Severity | None, Query(description="Filter by severity.")] = None,
+    finding_type: Annotated[FindingType | None, Query(description="Filter by kind.")] = None,
+    scan_id: Annotated[UUID | None, Query(description="Only findings from this scan.")] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> FindingList:
@@ -74,6 +82,10 @@ async def list_findings(
         filters.append(FindingModel.agent == agent.value)
     if severity is not None:
         filters.append(FindingModel.severity == severity.value)
+    if finding_type is not None:
+        filters.append(FindingModel.finding_type == finding_type.value)
+    if scan_id is not None:
+        filters.append(FindingModel.scan_id == scan_id)
 
     count_stmt = select(func.count()).select_from(FindingModel).where(*filters)
     total = int((await session.execute(count_stmt)).scalar_one())
@@ -106,4 +118,27 @@ async def get_finding(
     row = await session.get(FindingModel, finding_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
+    return FindingRead.model_validate(row)
+
+
+@router.patch("/{finding_id}", response_model=FindingRead, summary="Update triage status")
+async def update_finding_status(
+    finding_id: UUID,
+    payload: FindingStatusUpdate,
+    session: SessionDep,
+    principal: CurrentPrincipal,
+) -> FindingRead:
+    """Move a finding through the analyst workflow.
+
+    Status is the only mutable field: everything else records what an agent
+    observed, and rewriting that would destroy the audit trail.
+    """
+    del principal
+    row = await session.get(FindingModel, finding_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
+
+    row.status = payload.status.value
+    await session.commit()
+    await session.refresh(row)
     return FindingRead.model_validate(row)

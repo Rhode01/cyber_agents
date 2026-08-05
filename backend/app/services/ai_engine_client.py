@@ -13,7 +13,7 @@ from types import TracebackType
 from typing import Any, Self
 
 import httpx
-from cyberagents_contracts import AgentKind, FindingBatch
+from cyberagents_contracts import AgentKind, FindingBatch, VulnerabilityAnalyzeRequest
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
@@ -61,7 +61,11 @@ class AiEngineClient:
         return payload
 
     async def analyze(self, agent: AgentKind, request: AgentRunRequest) -> FindingBatch:
-        """Ask one agent to analyse one artifact and return its findings."""
+        """Ask one agent to analyse one raw artifact and return its findings.
+
+        The three stub agents still take raw text. The vulnerability agent takes a
+        parsed scan instead - see ``analyze_vulnerability``.
+        """
         body = {
             "source": request.source,
             "asset": request.asset,
@@ -69,10 +73,26 @@ class AiEngineClient:
             "context": request.context,
         }
         payload = await self._request("POST", f"/agents/{agent.value}/analyze", json=body)
+        return self._as_batch(payload, f"/agents/{agent.value}/analyze")
+
+    async def analyze_vulnerability(self, request: VulnerabilityAnalyzeRequest) -> FindingBatch:
+        """Send a parsed scan to the vulnerability agent.
+
+        The backend does the parsing, so what crosses the wire is the normalized
+        scan rather than the raw XML. Every string inside it is untrusted; the
+        ai.engine fences it before it reaches a prompt.
+        """
+        path = "/agents/vulnerability/analyze"
+        payload = await self._request("POST", path, json=request.model_dump(mode="json"))
+        return self._as_batch(payload, path)
+
+    @staticmethod
+    def _as_batch(payload: dict[str, Any], path: str) -> FindingBatch:
+        """Validate a response against the shared contract."""
         try:
             return FindingBatch.model_validate(payload)
         except ValueError as err:  # pydantic ValidationError subclasses ValueError
-            msg = f"ai.engine returned a payload that does not match the Finding contract: {err}"
+            msg = f"ai.engine {path} returned a payload that breaks the Finding contract: {err}"
             raise AiEngineError(msg) from err
 
     async def _request(

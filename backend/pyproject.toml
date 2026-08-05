@@ -15,6 +15,12 @@ dependencies = [
     "arq>=0.28.0,<0.29.0",
     "httpx>=0.28.1,<0.29.0",
     "structlog>=26.1.0,<27.0.0",
+    # Required by FastAPI for UploadFile / Form. Absent from the Phase 1 lock,
+    # where it only appeared inside unselected fastapi[all] extras metadata.
+    "python-multipart>=0.0.20,<0.1.0",
+    # Blocks XXE and entity expansion (billion laughs) on uploaded scan XML, and
+    # keeps ruff's S314/S405/S320 satisfied without a noqa.
+    "defusedxml>=0.7.1,<0.8.0",
     "cyberagents-contracts",
 ]
 
@@ -32,6 +38,7 @@ ruff = "^0.16.1"
 mypy = "^2.3.0"
 pytest = "^9.1.1"
 pytest-asyncio = "^1.4.0"
+types-defusedxml = "^0.7.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

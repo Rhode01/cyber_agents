@@ -8,7 +8,15 @@ module only adds the read model that maps out of the ORM.
 
 from __future__ import annotations
 
-from cyberagents_contracts import AgentKind, Finding, FindingBatch, FindingCreate, Severity
+from cyberagents_contracts import (
+    AgentKind,
+    Finding,
+    FindingBatch,
+    FindingCreate,
+    FindingStatus,
+    FindingType,
+    Severity,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 # Re-exported so the rest of the backend imports one consistent surface.
@@ -20,6 +28,9 @@ __all__ = [
     "FindingCreate",
     "FindingList",
     "FindingRead",
+    "FindingStatus",
+    "FindingStatusUpdate",
+    "FindingType",
     "Severity",
 ]
 
@@ -39,3 +50,15 @@ class FindingList(BaseModel):
     total: int = Field(ge=0, description="Number of rows matching the filter, ignoring paging.")
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
+
+
+class FindingStatusUpdate(BaseModel):
+    """The only mutable part of a finding.
+
+    Everything else is what an agent observed, and rewriting an observation would
+    destroy the audit trail. Triage state is the analyst's to change.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: FindingStatus
