@@ -45,6 +45,7 @@ def to_model(finding: FindingCreate) -> FindingModel:
         recommendation=finding.recommendation,
         status=finding.status.value,
         scan_id=finding.scan_id,
+        run_id=finding.run_id,
         raw_reference=finding.raw_reference,
         detected_at=finding.detected_at,
     )
@@ -115,8 +116,12 @@ async def run_agent(
     client: AiEngineClient,
     agent: AgentKind,
     request: AgentRunRequest,
-) -> list[FindingModel]:
-    """Call one ai.engine agent and persist whatever it returns."""
+) -> list[FindingModel] | list[FindingCreate]:
+    """Call one ai.engine agent and persist whatever it returns.
+
+    When ``request.persist`` is false the wire findings are returned as-is (they
+    have no id/timestamps yet); otherwise the persisted ORM rows come back.
+    """
     logger.info("agent.run.start", agent=agent.value, source=request.source, asset=request.asset)
 
     from app.models.setting import Setting as SettingModel
@@ -137,8 +142,17 @@ async def run_agent(
 
     if not request.persist:
         logger.info("agent.run.done", agent=agent.value, count=len(batch.findings), persisted=False)
-        return [to_model(finding) for finding in batch.findings]
+        return list(batch.findings)
 
-    rows = await persist_findings(session, batch.findings)
+    # Stamp the findings with the run that produced them so the scans page can
+    # group them into a per-run session. The ai.engine has no knowledge of runs.
+    findings = batch.findings
+    if request.run_id is not None:
+        findings = [
+            finding.model_copy(update={"run_id": request.run_id})
+            for finding in findings
+        ]
+
+    rows = await persist_findings(session, findings)
     logger.info("agent.run.done", agent=agent.value, count=len(rows), persisted=True)
     return rows

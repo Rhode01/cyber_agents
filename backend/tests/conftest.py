@@ -28,3 +28,18 @@ async def client() -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://backend.test") as http_client:
         yield http_client
+
+
+@pytest.fixture(autouse=True)
+async def _dispose_db_engine() -> AsyncIterator[None]:
+    """Drop the process-wide engine after each test.
+
+    Each test gets its own asyncio loop, but the engine is a module-level
+    singleton whose pooled connections stay bound to the loop that created
+    them. Without disposal, the second DB-backed test to run would hand its
+    requests to a pool owned by the first test's now-closed loop.
+    """
+    yield
+    from app.db.session import dispose_engine
+
+    await dispose_engine()

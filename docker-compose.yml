@@ -52,10 +52,13 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
       REDIS_URL: redis://redis:6379/0
-      AI_ENGINE_URL: http://ai-engine:8003
+      AI_ENGINE_URL: http://host.docker.internal:8003
       CORS_ORIGINS: '["http://localhost:3000"]'
     ports:
       - "8000:8000"
+    # ai-engine runs on the host network, so reach it through the host gateway.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
@@ -90,7 +93,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
       REDIS_URL: redis://redis:6379/0
-      AI_ENGINE_URL: http://ai-engine:8003
+      AI_ENGINE_URL: http://host.docker.internal:8003
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
@@ -99,7 +104,7 @@ services:
     healthcheck:
       test: ["CMD", "arq", "--check", "app.worker.settings.WorkerSettings"]
       interval: 15s
-      timeout: 5s
+      timeout: 15s
       retries: 4
       start_period: 20s
 
@@ -111,6 +116,10 @@ services:
       dockerfile: ai.engine/Dockerfile
     image: cyber-agents/ai-engine:dev
     restart: unless-stopped
+    # The scanner agent must see the host's interfaces (wlan0, docker0, ...) to
+    # enumerate and sweep the LAN, so it shares the host network stack. The
+    # backend talks to it through the host gateway (host.docker.internal).
+    network_mode: host
     env_file:
       - path: .env
         required: false
@@ -120,9 +129,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      BACKEND_URL: http://backend:8000
-    ports:
-      - "8003:8003"
+      # Backend publishes 8000 on the host; with host networking localhost works.
+      BACKEND_URL: http://localhost:8000
     healthcheck:
       test:
         - CMD

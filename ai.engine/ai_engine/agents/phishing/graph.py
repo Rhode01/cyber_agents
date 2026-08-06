@@ -31,6 +31,17 @@ def should_reason(state: PhishingState) -> str:
     return "reason"
 
 
+def route_after_scan(state: PhishingState) -> str:
+    """Route local targets straight to emit_findings, skipping DNS/rule/LLM checks.
+
+    The scan node marks ``local_target`` when the asset is a loopback or private
+    host, for which a phishing verdict would be meaningless noise.
+    """
+    if state.get("local_target"):
+        return "emit_findings"
+    return "normalize"
+
+
 def build_graph() -> Any:
     """Build and compile the phishing detection graph."""
     builder = StateGraph(PhishingState)
@@ -42,7 +53,13 @@ def build_graph() -> Any:
     builder.add_node("emit_findings", emit_findings)
 
     builder.add_edge(START, "scan")
-    builder.add_edge("scan", "normalize")
+
+    builder.add_conditional_edges(
+        "scan",
+        route_after_scan,
+        {"normalize": "normalize", "emit_findings": "emit_findings"},
+    )
+
     builder.add_edge("normalize", "rule_check")
 
     builder.add_conditional_edges(

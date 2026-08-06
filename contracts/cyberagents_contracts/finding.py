@@ -131,6 +131,9 @@ class FindingCreate(BaseModel):
     scan_id: UUID | None = Field(
         default=None, description="The scan intake record this came from, when there was one."
     )
+    run_id: UUID | None = Field(
+        default=None, description="The pipeline run this finding came from, when there was one."
+    )
     raw_reference: str | None = Field(
         default=None,
         max_length=512,

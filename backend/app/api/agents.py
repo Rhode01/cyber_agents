@@ -7,7 +7,9 @@ knows the difference and never touches the database either way.
 
 from __future__ import annotations
 
-from cyberagents_contracts import AgentKind
+from typing import cast
+
+from cyberagents_contracts import AgentKind, FindingCreate
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import AiEngineDep, SessionDep, SettingsDep
@@ -55,9 +57,14 @@ async def run(
     except AiEngineError as err:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(err)) from err
 
+    findings: list[FindingRead | FindingCreate]
+    if payload.persist:
+        findings = [FindingRead.model_validate(row) for row in rows]
+    else:
+        findings = cast(list[FindingRead | FindingCreate], rows)
     return AgentRunResponse(
         agent=agent,
         mode="inline",
         persisted=payload.persist,
-        findings=[FindingRead.model_validate(row) for row in rows],
+        findings=findings,
     )

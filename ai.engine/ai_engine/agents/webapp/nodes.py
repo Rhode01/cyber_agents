@@ -25,7 +25,11 @@ from ai_engine.agents.webapp.prompts import SYSTEM_PROMPT
 from ai_engine.agents.webapp.state import WebappState
 from ai_engine.agents.webapp.tools import run_nuclei_scan
 from ai_engine.core.logging import get_logger
-from ai_engine.llm.factory import LlmNotConfiguredError, require_configured_chat_model
+from ai_engine.llm.factory import (
+    LlmNotConfiguredError,
+    extract_message_text,
+    require_configured_chat_model,
+)
 from ai_engine.parsers import ParseError, nuclei, zap
 
 logger = get_logger(__name__)
@@ -220,7 +224,7 @@ async def reason(state: WebappState) -> dict[str, Any]:
         context = state.get("context", {})
         model = require_configured_chat_model(context=context)
         response: AIMessage = await model.ainvoke(messages)
-        content = str(response.content).strip()
+        content = extract_message_text(response).strip()
 
         if content.startswith("```"):
             content = content.split("```")[1]
@@ -234,6 +238,8 @@ async def reason(state: WebappState) -> dict[str, Any]:
         logger.warning("webapp.reason.no_llm", llm_invoked=False)
     except (json.JSONDecodeError, AttributeError) as exc:
         logger.warning("webapp.reason.parse_failed", error=str(exc))
+    except Exception as exc:
+        logger.warning("webapp.reason.llm_error", error=str(exc), llm_invoked=False)
 
     return {"messages": messages, "raw_findings": raw_findings}
 

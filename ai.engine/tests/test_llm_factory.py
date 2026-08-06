@@ -1,14 +1,16 @@
-"""The ChatOpenAI factory builds from the environment and makes no live call."""
+"""The LLM factory builds from the environment and makes no live call."""
 
 from __future__ import annotations
 
 import pytest
+from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 
 from ai_engine.core.config import Settings, get_settings
 from ai_engine.llm.factory import (
     LlmNotConfiguredError,
     describe_model,
+    extract_message_text,
     get_chat_model,
     require_configured_chat_model,
     reset_chat_model_cache,
@@ -78,3 +80,20 @@ def test_construction_succeeds_without_a_key_but_calling_is_refused(
 
     with pytest.raises(LlmNotConfiguredError):
         require_configured_chat_model()
+
+
+def test_extract_message_text_flattens_anthropic_blocks() -> None:
+    message = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Let me reason about this."},
+            {"type": "text", "text": '{"findings": []}'},
+        ]
+    )
+
+    assert extract_message_text(message) == '{"findings": []}'
+
+
+def test_extract_message_text_passes_openai_string_through() -> None:
+    message = AIMessage(content="plain answer")
+
+    assert extract_message_text(message) == "plain answer"

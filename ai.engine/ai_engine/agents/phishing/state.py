@@ -20,3 +20,4 @@ class PhishingState(AgentState):
     verdict: str | None
     explanation: str | None
     raw_findings: NotRequired[list[dict[str, Any]]]
+    local_target: NotRequired[bool]

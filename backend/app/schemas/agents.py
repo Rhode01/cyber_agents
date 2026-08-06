@@ -7,8 +7,9 @@ normalises and stores it; the ai.engine fences it before it reaches a prompt.
 from __future__ import annotations
 
 from typing import Any, Literal
+from uuid import UUID
 
-from cyberagents_contracts import AgentKind
+from cyberagents_contracts import AgentKind, FindingCreate
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.finding import FindingRead
@@ -33,6 +34,10 @@ class AgentRunRequest(BaseModel):
         ),
     )
     context: dict[str, Any] = Field(default_factory=dict, description="Optional trusted metadata.")
+    run_id: UUID | None = Field(
+        default=None,
+        description="The pipeline run this agent execution belongs to, if any.",
+    )
     persist: bool = Field(default=True, description="Store returned findings in PostgreSQL.")
     background: bool = Field(
         default=False,
@@ -49,4 +54,10 @@ class AgentRunResponse(BaseModel):
     mode: Literal["inline", "background"]
     persisted: bool
     job_id: str | None = Field(default=None, description="Set when mode is background.")
-    findings: list[FindingRead] = Field(default_factory=list)
+    findings: list[FindingRead | FindingCreate] = Field(
+        default_factory=list,
+        description=(
+            "Persisted findings when ``persist`` is true (carry id/timestamps); "
+            "otherwise the wire findings as returned by the ai.engine."
+        ),
+    )

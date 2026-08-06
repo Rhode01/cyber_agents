@@ -16,6 +16,7 @@ from typing import Any
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 
 from ai_engine.core.config import get_settings
@@ -26,6 +27,29 @@ logger = get_logger(__name__)
 
 class LlmNotConfiguredError(RuntimeError):
     """No API key is present, so a live call could not succeed."""
+
+
+def extract_message_text(response: BaseMessage) -> str:
+    """Flatten a chat response to a single plain-text string.
+
+    OpenAI returns ``str`` content; Anthropic returns a list of content blocks
+    that may include ``thinking`` blocks from reasoning models. Joining only the
+    text blocks keeps downstream JSON parsing looking at one string either way.
+    """
+    content = response.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts)
+    return str(content)
 
 
 @lru_cache(maxsize=4)
@@ -53,6 +77,9 @@ def get_chat_model(
             temperature=temperature,
             max_retries=max_retries,
             default_request_timeout=timeout,
+            # The SDK's non-streaming path fails on servers that answer every
+            # request with SSE regardless of the Accept header.
+            streaming=True,
         )
     
     # Fallback to OpenAI

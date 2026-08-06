@@ -97,6 +97,15 @@ class Finding(Base):
         nullable=True,
         index=True,
     )
+    # Same SET NULL rationale as scan_id: deleting a run record must never
+    # destroy the findings an analyst may already be working from.
+    # No explicit name: Base's convention derives fk_findings_run_id_runs.
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     raw_reference: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

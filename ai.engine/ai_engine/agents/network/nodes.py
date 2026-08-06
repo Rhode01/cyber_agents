@@ -26,7 +26,11 @@ from ai_engine.agents.network.prompts import SYSTEM_PROMPT
 from ai_engine.agents.network.state import NetworkState
 from ai_engine.agents.network.tools import capture_traffic_snapshot
 from ai_engine.core.logging import get_logger
-from ai_engine.llm.factory import LlmNotConfiguredError, require_configured_chat_model
+from ai_engine.llm.factory import (
+    LlmNotConfiguredError,
+    extract_message_text,
+    require_configured_chat_model,
+)
 from ai_engine.parsers import ParseError, suricata, zeek
 
 logger = get_logger(__name__)
@@ -147,7 +151,8 @@ async def normalize(state: NetworkState) -> dict[str, Any]:
             parsed_flag = True
             for line in raw.splitlines():
                 if line.startswith("METRICS "):
-                    _, key, value = line.split(" ", 2)
+                    _, key_value = line.split(" ", 1)
+                    key, _, value = key_value.partition("=")
                     if key in (
                         "connections_total",
                         "established",
@@ -276,7 +281,7 @@ async def reason(state: NetworkState) -> dict[str, Any]:
         context = state.get("context", {})
         model = require_configured_chat_model(context=context)
         response: AIMessage = await model.ainvoke(messages)
-        content = str(response.content).strip()
+        content = extract_message_text(response).strip()
 
         if content.startswith("```"):
             content = content.split("```")[1]
@@ -290,6 +295,8 @@ async def reason(state: NetworkState) -> dict[str, Any]:
         logger.warning("network.reason.no_llm", llm_invoked=False)
     except (json.JSONDecodeError, AttributeError) as exc:
         logger.warning("network.reason.parse_failed", error=str(exc))
+    except Exception as exc:
+        logger.warning("network.reason.llm_error", error=str(exc), llm_invoked=False)
 
     return {"messages": messages, "raw_findings": raw_findings}
 

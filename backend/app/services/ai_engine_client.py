@@ -13,7 +13,12 @@ from types import TracebackType
 from typing import Any, Self
 
 import httpx
-from cyberagents_contracts import AgentKind, FindingBatch, VulnerabilityAnalyzeRequest
+from cyberagents_contracts import (
+    AgentKind,
+    DiscoveryReport,
+    FindingBatch,
+    VulnerabilityAnalyzeRequest,
+)
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
@@ -74,6 +79,22 @@ class AiEngineClient:
         }
         payload = await self._request("POST", f"/agents/{agent.value}/analyze", json=body)
         return self._as_batch(payload, f"/agents/{agent.value}/analyze")
+
+    async def run_discovery(self) -> DiscoveryReport:
+        """Ask the ai.engine to discover interfaces, live hosts, and web hosts.
+
+        The report is proxied to the frontend so the Run page can hand the
+        discovered web hosts to the web-app agents as scan targets.
+        """
+        payload = await self._request("POST", "/discovery/run", json={})
+        try:
+            return DiscoveryReport.model_validate(payload)
+        except ValueError as err:  # pydantic ValidationError subclasses ValueError
+            msg = (
+                "ai.engine /discovery/run returned a payload that breaks the "
+                f"Discovery contract: {err}"
+            )
+            raise AiEngineError(msg) from err
 
     async def analyze_vulnerability(self, request: VulnerabilityAnalyzeRequest) -> FindingBatch:
         """Send a parsed scan to the vulnerability agent.

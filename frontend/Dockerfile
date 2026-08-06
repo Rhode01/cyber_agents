@@ -17,6 +17,9 @@ ARG NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL} \
     NEXT_TELEMETRY_DISABLED=1
 
+# corepack downloads the pnpm tarball on first use; reuse the deps-stage cache
+# so the build works without network access.
+COPY --from=deps /root/.cache/node/corepack /root/.cache/node/corepack
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 

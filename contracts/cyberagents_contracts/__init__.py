@@ -7,6 +7,7 @@ consumers re-resolve the path dependency.
 """
 
 from cyberagents_contracts.analyze import VulnerabilityAnalyzeRequest
+from cyberagents_contracts.discovery import DiscoveryReport, InterfaceInfo, ServicePort, WebHost
 from cyberagents_contracts.finding import (
     SEVERITY_ORDER,
     AgentKind,
@@ -28,18 +29,22 @@ from cyberagents_contracts.scan import (
 __all__ = [
     "SEVERITY_ORDER",
     "AgentKind",
+    "DiscoveryReport",
     "Finding",
     "FindingBatch",
     "FindingCreate",
     "FindingStatus",
     "FindingType",
+    "InterfaceInfo",
     "NormalizedScan",
     "ScanFormat",
     "ScanHost",
     "ScanPort",
     "ScanStatus",
+    "ServicePort",
     "Severity",
     "VulnerabilityAnalyzeRequest",
+    "WebHost",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.5.0"

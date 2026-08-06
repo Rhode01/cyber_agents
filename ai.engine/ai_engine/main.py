@@ -16,7 +16,7 @@ from ai_engine import __version__
 from ai_engine.core.config import get_settings
 from ai_engine.core.logging import configure_logging, get_logger
 from ai_engine.llm.factory import describe_model
-from ai_engine.routers import health, network, phishing, vulnerability, webapp
+from ai_engine.routers import discovery, health, network, phishing, vulnerability, webapp
 
 logger = get_logger(__name__)
 
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(discovery.router)
     app.include_router(vulnerability.router)
     app.include_router(phishing.router)
     app.include_router(network.router)

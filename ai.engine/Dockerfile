@@ -31,12 +31,13 @@ ENV PYTHONUNBUFFERED=1 \
 # apps, dig/curl for phishing URL checks. The test hosts used by the agents are
 # safe, but the platform is a scanning tool by design.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        iproute2 \
         nmap \
         dnsutils \
         curl \
         unzip \
         ca-certificates \
-    && NUCLEI_VER="$(curl -fsSL https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | tr -d '\n' | sed -n 's/.*"tag_name":"v\([^"]*\)".*/\1/p')" \
+    && NUCLEI_VER="3.3.10" \
     && curl -fsSL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_amd64.zip" -o /tmp/nuclei.zip \
     && unzip -o /tmp/nuclei.zip -d /usr/local/bin \
     && rm -f /tmp/nuclei.zip \
@@ -52,6 +53,14 @@ COPY --from=builder /src/ai.engine/.venv /src/ai.engine/.venv
 
 RUN chown -R app:app /src
 USER app
+
+# Nuclei ships without templates; fetch the official set so the webapp agent's
+# self-launched scans can actually detect anything. Nuclei resolves its template
+# store to $HOME/nuclei-templates (HOME=/src for the app user), so install there
+# rather than in the config dir.
+RUN mkdir -p /src/nuclei-templates \
+    && nuclei -update-templates -silent \
+    && test -n "$(ls -A /src/nuclei-templates)"
 
 EXPOSE 8003
 

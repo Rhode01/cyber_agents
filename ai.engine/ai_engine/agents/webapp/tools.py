@@ -2,14 +2,39 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
 from langchain_core.tools import tool
 
 from ai_engine.agents.common.scanning import duration_seconds, run_command
+from ai_engine.agents.common.targets import is_local_target
 
-_NUCLEI_TIMEOUT_SECONDS = 120.0
+_NUCLEI_TIMEOUT_SECONDS = 180.0
+
+# A curated slice of the official nuclei template set. Running all ~14k
+# templates against one URL takes minutes; these subdirectories cover the
+# findings an interactive webapp scan should surface (default credentials,
+# misconfigurations, exposure / info-disclosure) and finish in seconds.
+# Default-login checks are dropped for local targets: flagging "default logins"
+# on a local instance is noise.
+_NUCLEI_TEMPLATE_SUBDIRS = (
+    "http/default-logins",
+    "http/misconfiguration",
+    "http/exposures",
+)
+_NUCLEI_TEMPLATE_SUBDIRS_NON_LOCAL_ONLY = "http/default-logins"
+
+# Resolved once at import: the container's HOME is fixed, so the template store
+# location cannot change at runtime.
+_NUCLEI_TEMPLATES_DIR = os.path.join(os.path.expanduser("~"), "nuclei-templates")
+_NUCLEI_AVAILABLE_SUBDIRS = [
+    subdir
+    for subdir in _NUCLEI_TEMPLATE_SUBDIRS
+    if os.path.isdir(os.path.join(_NUCLEI_TEMPLATES_DIR, subdir))
+]
+
 
 
 @tool
@@ -53,13 +78,26 @@ async def run_nuclei_scan(target_url: str) -> dict[str, Any]:
     if not target_url.lower().startswith(("http://", "https://")):
         target_url = f"https://{target_url}"
 
+    subdirs = [
+        subdir for subdir in _NUCLEI_AVAILABLE_SUBDIRS
+        if not (is_local_target(target_url) and subdir == _NUCLEI_TEMPLATE_SUBDIRS_NON_LOCAL_ONLY)
+    ]
+    template_paths = [
+        os.path.join(_NUCLEI_TEMPLATES_DIR, subdir) for subdir in subdirs
+    ]
+
+    command = [
+        "nuclei", "-u", target_url,
+        "-jsonl", "-silent", "-nc",
+        "-c", "150", "-timeout", "8", "-retries", "1",
+        "-duc",
+    ]
+    if template_paths:
+        command += ["-templates", ",".join(template_paths)]
+
     started_at = time.monotonic()
     returncode, stdout, stderr = await run_command(
-        [
-            "nuclei", "-u", target_url,
-            "-json", "-silent", "-nc",
-            "-timeout", "20", "-retries", "1",
-        ],
+        command,
         timeout_seconds=_NUCLEI_TIMEOUT_SECONDS,
         label="nuclei",
     )

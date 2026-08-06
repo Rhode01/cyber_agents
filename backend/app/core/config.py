@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # legitimately takes minutes rather than seconds.
     ai_engine_timeout_seconds: float = Field(default=300.0, gt=0)
 
+    # ------------------------------------------------------------- mcpserver --
+    mcp_server_url: str = "http://mcpserver:8004"
+
     # ----------------------------------------------------------------- http --
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 

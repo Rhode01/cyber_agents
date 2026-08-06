@@ -20,12 +20,17 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from ai_engine.agents.common.findings import resolve_finding_type
 from ai_engine.agents.common.placeholder import placeholder_finding
+from ai_engine.agents.common.targets import is_local_target
 from ai_engine.agents.common.untrusted import wrap_untrusted
 from ai_engine.agents.phishing.prompts import SYSTEM_PROMPT
 from ai_engine.agents.phishing.state import PhishingState
 from ai_engine.agents.phishing.tools import analyze_url_or_domain
 from ai_engine.core.logging import get_logger
-from ai_engine.llm.factory import LlmNotConfiguredError, require_configured_chat_model
+from ai_engine.llm.factory import (
+    LlmNotConfiguredError,
+    extract_message_text,
+    require_configured_chat_model,
+)
 from ai_engine.parsers import ParseError
 from ai_engine.parsers import email as email_parser
 
@@ -53,6 +58,14 @@ async def scan(state: PhishingState) -> dict[str, Any]:
     target = (state.get("asset") or "").strip()
     if not target:
         return {"scan_info": {"status": "no-target", "tool": state.get("source", "")}}
+
+    if is_local_target(target):
+        # A loopback/private host can never be a phishing impersonation; running
+        # DNS lookalike checks and an LLM verdict against it only yields noise.
+        return {
+            "scan_info": {"status": "local-skipped", "tool": "url-scan"},
+            "local_target": True,
+        }
 
     result = await analyze_url_or_domain(target)
     logger.info(
@@ -207,7 +220,7 @@ async def reason(state: PhishingState) -> dict[str, Any]:
         context = state.get("context", {})
         model = require_configured_chat_model(context=context)
         response: AIMessage = await model.ainvoke(messages)
-        content = str(response.content).strip()
+        content = extract_message_text(response).strip()
 
         if content.startswith("```"):
             content = content.split("```")[1]
@@ -224,6 +237,8 @@ async def reason(state: PhishingState) -> dict[str, Any]:
         logger.warning("phishing.reason.no_llm", llm_invoked=False)
     except (json.JSONDecodeError, AttributeError) as exc:
         logger.warning("phishing.reason.parse_failed", error=str(exc))
+    except Exception as exc:
+        logger.warning("phishing.reason.llm_error", error=str(exc), llm_invoked=False)
 
     return {
         "messages": messages,
@@ -241,6 +256,30 @@ async def emit_findings(state: PhishingState) -> dict[str, Any]:
     """Produce contract-shaped findings based on verdict and rules."""
     source = state["source"]
     asset = state["asset"]
+
+    if state.get("local_target"):
+        from datetime import UTC, datetime
+
+        logger.info("phishing.emit_findings", count=0, reason="local_target")
+        return {"findings": [FindingCreate(
+            agent=AgentKind.phishing,
+            finding_type=FindingType.informational,
+            title="Phishing analysis skipped: local target",
+            description=(
+                "The target resolves to a loopback or private network host, which cannot "
+                "be a phishing impersonation. DNS lookalike checks and an LLM verdict "
+                "were skipped for this target."
+            ),
+            severity=Severity.info,
+            confidence=0.0,
+            source=source,
+            asset=asset,
+            evidence={"reason": "local target"},
+            recommendation=None,
+            raw_reference=None,
+            detected_at=datetime.now(UTC),
+        )]}
+
     raw_findings = state.get("raw_findings", [])
     rule_hits = state.get("rule_hits", [])
 

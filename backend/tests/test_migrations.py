@@ -16,11 +16,12 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import Table
 
 from app.models.finding import Finding as FindingModel
+from app.models.run import Run as RunModel
 from app.models.scan import Scan as ScanModel
 from app.models.setting import Setting as SettingModel
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-HEAD_REVISION = "0004"
+HEAD_REVISION = "0007"
 
 
 def _config() -> Config:
@@ -45,9 +46,10 @@ def test_the_revision_chain_is_linear_and_rooted() -> None:
     scripts = _script_directory()
     revisions = list(scripts.walk_revisions())
 
-    assert [r.revision for r in revisions] == ["0004", "0003", "0002", "0001"]
+    expected = ["0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [r.revision for r in revisions] == expected
     assert revisions[-1].down_revision is None
-    assert revisions[0].down_revision == "0003"
+    assert revisions[0].down_revision == "0006"
 
 
 def test_head_is_reachable() -> None:
@@ -65,7 +67,7 @@ def test_migration_ddl_matches_the_orm_models() -> None:
     """
     sql = _render_sql()
 
-    for model in (FindingModel, ScanModel, SettingModel):
+    for model in (FindingModel, RunModel, ScanModel, SettingModel):
         table = model.__table__
         assert isinstance(table, Table)
 
