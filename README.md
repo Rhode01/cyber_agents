@@ -1,8 +1,8 @@
 # Cybersecurity Agents Platform
 
-A modular defensive security platform. It ingests output from security tools you
-already run, interprets it with rules plus LLM reasoning, correlates findings
-into incidents, and surfaces them to an analyst.
+A modular defensive security platform. It discovers what is reachable, runs
+four LLM-driven detection agents over it, correlates the results into
+findings, and surfaces them to an analyst through a live dashboard.
 
 Four detection agents share one pipeline:
 
@@ -18,10 +18,10 @@ bodies, HTTP responses, and log fields are attacker-controllable. The boundary i
 enforced in one place: `ai.engine/ai_engine/agents/common/untrusted.py`. Nothing
 reaches a prompt without passing through it.
 
-> **This repository is at Phase 1: scaffolding.** Every module boots, every
-> health endpoint answers, every agent graph compiles - and no detection logic,
-> no live LLM call, and no MCP tool exists yet. See
-> [Deferred](#deferred-past-phase-1).
+The MVP pipeline is live end to end: the frontend launches a run, the backend
+persists it, ai.engine discovers the device's own interfaces and probes them,
+the four agent graphs reason over the results (live LLM with a graceful
+no-key fallback), and findings land back on the dashboard.
 
 ---
 
@@ -32,7 +32,7 @@ dependencies in its own virtualenv**. Nothing is shared through a venv - the
 modules are tied together only by the root `Makefile` and `docker-compose.yml`.
 
 ```
-                                 ┌──────────────┐
+                                  ┌──────────────┐
    security tools ──────────────► │   backend    │ :8000
    (nmap, zap, zeek, mail)        │              │
                                   │  owns ALL    │◄──── frontend :3000
@@ -41,29 +41,34 @@ modules are tied together only by the root `Makefile` and `docker-compose.yml`.
                                      │        │
                        PostgreSQL ◄──┘        └──► ai.engine :8003
                        Redis (arq)                 LangGraph agents
-                                                   no database at all
+                                                  + nmap, nuclei on the host
                                   mcpserver :8004  (stub)
 ```
 
 | Module | Port | Stack | Package manager |
 | --- | --- | --- | --- |
 | `backend/` | **8000** | FastAPI, SQLAlchemy 2.0 async, asyncpg, Alembic, arq | Poetry (`backend/.venv`) |
-| `ai.engine/` | **8003** | FastAPI, LangChain, LangGraph, `langchain-openai` | Poetry (`ai.engine/.venv`) |
+| `ai.engine/` | **8003** | FastAPI, LangChain, LangGraph, `langchain-openai` / `langchain-anthropic` | Poetry (`ai.engine/.venv`) |
 | `frontend/` | **3000** | Next.js App Router, React, TypeScript | pnpm (`frontend/node_modules`) |
 | `mcpserver/` | **8004** | MCP Python SDK over Streamable HTTP | Poetry (`mcpserver/.venv`) |
-| `contracts/` | – | The shared `Finding` schema, pydantic only | consumed as a path dependency |
+| `contracts/` | – | Shared `Finding` and `DiscoveryReport` schemas, pydantic only | consumed as a path dependency |
 
 Shared infrastructure runs as containers: PostgreSQL and Redis. Background and
-scheduled jobs run through **arq** inside the backend.
+scheduled jobs run through **arq** inside the backend. The ai.engine image ships
+`nmap` and `nuclei` so the agents can launch their own scans.
 
 ### Data flow
 
-1. A security tool's output arrives at the **backend** (`:8000`), which
-   normalises and stores it.
-2. The backend calls an **ai.engine** agent endpoint (`:8003`) - inline, or via
+1. The frontend creates a **run** (a scan target + mode) on the backend
+   (`:8000`), which persists it.
+2. **Discovery** runs on the ai.engine host (`POST /discovery/run`): it
+   enumerates the device's own network interfaces and probes their addresses -
+   it never sweeps the subnet. A light `nmap -Pn -sV` pass reports
+   services, products, and versions for the Services Active page.
+3. The backend calls an **ai.engine** agent endpoint (`:8003`) - inline, or via
    an arq job when the run is long.
-3. The ai.engine runs that agent's LangGraph graph and returns `Finding` objects.
-4. The backend persists them, correlates them (later phase), and serves the
+4. The ai.engine runs that agent's LangGraph graph and returns `Finding` objects.
+5. The backend persists them, associates them with the run, and serves the
    **frontend** (`:3000`).
 
 **The ai.engine never touches the database.** When it needs platform state it
@@ -72,13 +77,14 @@ calls the backend over HTTP. This is enforced by a test, not by convention:
 `ai_engine/` and fails on any database import, and checks the declared
 dependencies too.
 
-### The `Finding` contract
+### The shared contracts
 
-Both services exchange one shape, defined once in `contracts/` and installed
-into each module's **own** virtualenv as a Poetry path dependency
+Both services exchange shapes defined once in `contracts/` and installed into
+each module's **own** virtualenv as a Poetry path dependency
 (`develop = true`). One definition, two virtualenvs, no drift. The backend's
 `tests/test_finding_contract.py` is the guard that the database table keeps up
-with it.
+with `Finding`; `ai.engine/tests/test_discovery.py` guards `DiscoveryReport` and
+its `ServicePort` rows.
 
 Because of the path dependency, the backend and ai.engine Docker builds use the
 **repository root** as their build context (`dockerfile: backend/Dockerfile`).
@@ -95,6 +101,10 @@ Because of the path dependency, the backend and ai.engine Docker builds use the
 | pnpm | **11.x** | frontend |
 | Docker + Compose v2 | any recent | `make up` (PostgreSQL, Redis, all services) |
 | GNU make | **4.x** | all `make *` targets |
+
+`nmap` (and optionally `nuclei`) must be on the ai.engine host or baked into its
+image - the Docker image installs them automatically. When `nmap` is missing,
+discovery degrades to TCP probing and reports the services it could reach.
 
 ### Install on Debian / Kali / Ubuntu Linux
 
@@ -186,7 +196,14 @@ make verify     # probe every health endpoint
 
 Then:
 
-- <http://localhost:3000> – landing page, reads the backend's `/health`
+- <http://localhost:3000> – Detection Overview: quick auto-scan, severity and
+  agent coverage, latest detections, recent scans, live module map
+- <http://localhost:3000/run> – Run Agent: configure and launch the pipeline
+- <http://localhost:3000/services> – Services Active: hosts, ports, services,
+  versions, and per-service findings from discovery
+- <http://localhost:3000/scans> – scan history
+- <http://localhost:3000/settings/email-connect> – Gmail / Microsoft 365 /
+  IMAP email integration for the phishing agent
 - <http://localhost:8000/docs> – backend OpenAPI
 - <http://localhost:8003/docs> – ai.engine OpenAPI, one route per agent
 - <http://localhost:8004/health> – mcpserver liveness (its MCP endpoint is `/mcp`)
@@ -225,25 +242,30 @@ Every target changes into the module directory and uses **that module's** venv.
 All configuration is environment variables; nothing is committed. See
 [`.env.example`](.env.example) for the annotated list.
 
-The LLM is fully reconfigurable without code changes. `langchain-openai`'s
-`ChatOpenAI` is the single interface and OpenAI's hosted API is the default
-provider:
+The LLM is fully reconfigurable without code changes. `ChatOpenAI` (OpenAI) and
+`ChatAnthropic` are the supported backends, constructed lazily and cached:
 
 ```bash
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_BASE_URL=            # empty = OpenAI; set for any OpenAI-compatible endpoint
+
+ANTHROPIC_API_KEY=          # optional second provider
+ANTHROPIC_MODEL=
 ```
 
-The model is constructed lazily and cached. Phase 1 builds it and never calls it,
-so the stack boots fine with no API key at all - `GET :8003/health` reports the
-resolved configuration (never the key).
+Each agent reasons over its inputs and produces findings; if no API key is
+present the graph degrades gracefully and emits findings from its deterministic
+rules alone. `GET :8003/health` reports the resolved configuration (never the
+key).
 
-One other setting is easy to trip over: the MCP SDK rejects unexpected `Host` and
-`Origin` headers as DNS-rebinding protection and answers `421 Misdirected
-Request`. `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` default to
-localhost / 127.0.0.1 / the `mcpserver` service name on `MCP_PORT`; set them
-explicitly for any real deployment hostname.
+The MCP SDK rejects unexpected `Host` and `Origin` headers as DNS-rebinding
+protection and answers `421 Misdirected Request`. `MCP_ALLOWED_HOSTS` and
+`MCP_ALLOWED_ORIGINS` default to localhost / 127.0.0.1 / the `mcpserver` service
+name on `MCP_PORT`; set them explicitly for any real deployment hostname.
+
+Email integration is configured from the UI (Settings → Email Integration) and
+stored encrypted in the `settings` table; no credentials are committed.
 
 ---
 
@@ -256,12 +278,33 @@ contains a database library.
   never open a socket.
 - Alembic is async (`alembic/env.py`) and takes its URL from
   `app.core.config`, so the database location is defined in exactly one place.
-- One baseline migration, `0001_baseline-findings`, creates the `findings` table.
+- Migrations (`backend/alembic/versions/`): `0001` baseline findings, `0002`
+  scan intake + finding detail (evidence, asset, agent trace), `0003` finding
+  indexes, `0004` settings table, `0005` CVE IDs as a text array, `0006` runs
+  table, `0007` findings → run association.
 
 `agent` and `severity` are `VARCHAR` with `CHECK` constraints rather than native
 PostgreSQL enums: the Python `StrEnum` in `contracts/` stays the single
 validator, and adding a severity level later is a constraint swap instead of an
 `ALTER TYPE`.
+
+---
+
+## Discovery and the Services Active page
+
+Discovery is deliberately scoped: it scans **only the addresses of the device
+it runs on** (each interface's own IP plus `127.0.0.1`), never the surrounding
+subnet. `ai.engine/ai_engine/discovery/tools.py`:
+
+1. `list_interfaces()` – parses `ip -o -4 addr show`, discards loopback ranges,
+   host-routed /32s, and oversized subnets.
+2. TCP-probes the common web ports on those addresses.
+3. Runs `nmap -Pn -sV -p <ports> --open` and parses the XML into
+   `ServicePort` rows (service, product, version).
+
+The report is exposed at `POST /discovery/run` and rendered on the Services
+Active page (`/services`) with per-service findings, risk, and remediation
+matched by host and port.
 
 ---
 
@@ -281,37 +324,39 @@ graph.py    the StateGraph, its edges, and the compiled graph
 `agents/vulnerability/` is the reference implementation - its graph is wired
 explicitly so the pattern is readable in one file. The other three build the same
 shape through `agents/common/graph.py`. Each agent sits behind its own router in
-`ai_engine/routers/`, mounted at `POST /agents/<name>/analyze`.
+`ai_engine/routers/`, mounted at `POST /agents/<name>/analyze`. Discovery is not
+an agent - it feeds the pipeline a target list - so it lives on its own router.
 
 ---
 
-## What the Phase 1 checks actually prove
+## What the checks actually prove
 
 `make lint`, `make typecheck`, and `make test` are clean across every module
-(ruff, mypy `strict`, 50 tests, plus `tsc --noEmit` and `next build`). Beyond the
-obvious, a few tests exist specifically to stop the architecture eroding:
+(ruff, mypy `strict`, plus `tsc --noEmit` and `next build`). Beyond the obvious,
+a few tests exist specifically to stop the architecture eroding:
 
 | Test | Guards |
 | --- | --- |
 | `ai.engine/tests/test_no_database_imports.py` | ai.engine stays free of database code, in source *and* in declared dependencies |
 | `ai.engine/tests/test_agent_routers.py` | Every agent response validates against the shared `FindingBatch` with `extra="forbid"` |
 | `ai.engine/tests/test_graphs.py` | All four graphs compile and run; untrusted input reaches the prompt only fenced |
+| `ai.engine/tests/test_discovery.py` | Interface filtering, service parsing, and graceful degradation when `nmap` is missing |
+| `ai.engine/tests/test_llm_factory.py` | Provider selection, lazy construction, and the no-key fallback |
 | `backend/tests/test_finding_contract.py` | The `findings` columns still match the shared contract exactly |
-| `backend/tests/test_migrations.py` | The baseline migration's DDL matches the ORM model, rendered offline with no database |
+| `backend/tests/test_migrations.py` | The migrations' DDL matches the ORM models, rendered offline with no database |
+| `backend/tests/test_runs.py` / `test_discovery.py` | Run lifecycle and discovery proxy endpoints |
 | `mcpserver/tests/test_server.py` | A real MCP `initialize` handshake succeeds over Streamable HTTP |
 
 Two things cannot be checked without infrastructure: `GET /health/db` and the
 findings routes need PostgreSQL, and the arq worker needs Redis. `make up`
 provides both.
 
-## Deferred past Phase 1
+## Deferred
 
 Marked `TODO(phase-2)` in the code:
 
-- Real parsers for Nmap, OpenVAS, Trivy, ZAP, Nuclei, Zeek, Suricata, and MIME
-- Live LLM reasoning and tool binding (the graphs assemble prompts and stop)
-- Actual MCP tools (`mcpserver` registers one descriptive tool and nothing else)
+- Real MCP tools (`mcpserver` registers one descriptive tool and nothing else)
 - The correlation engine that groups findings into incidents
 - Authentication, RBAC, and audit beyond the placeholder in `core/security.py`
 - Threat-intel integrations, ML models, network baselining
-- Any dashboard beyond the health-check page
+- Scheduled (non-interactive) runs and email auto-polling
