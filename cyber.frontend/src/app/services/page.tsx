@@ -4,17 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 
 import { fetchFindings, runDiscovery } from '@/lib/api'
-import type { DiscoveryReport, Finding, ServicePort, Severity } from '@/lib/types'
-
-const SEVERITY_META: Record<Severity, { label: string; color: string }> = {
-  critical: { label: 'Critical', color: '#ef4444' },
-  high: { label: 'High', color: '#f97316' },
-  medium: { label: 'Medium', color: '#eab308' },
-  low: { label: 'Low', color: '#38bdf8' },
-  info: { label: 'Info', color: '#d946ef' },
-}
-
-const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
+import { SEVERITY_LABEL, SEVERITY_ORDER } from '@/lib/severity'
+import type { DiscoveryReport, Finding, ServicePort } from '@/types'
 
 /** True when a finding's asset refers to this exact host, and (when the
  * finding names a port) that port. Host-level findings (asset without a port)
@@ -93,9 +84,9 @@ function DetailTable({ rows }: { rows: Array<[string, string]> }) {
 }
 
 function riskText(finding: Finding): string {
-  const meta = SEVERITY_META[finding.severity] ?? SEVERITY_META.info
+  const label = SEVERITY_LABEL[finding.severity] ?? SEVERITY_LABEL.info
   const confidence = Math.round(finding.confidence * 100)
-  return `${meta.label} severity · ${confidence}% confidence${finding.description ? ` — ${finding.description}` : ''}`
+  return `${label} severity · ${confidence}% confidence${finding.description ? ` — ${finding.description}` : ''}`
 }
 
 export default function ServicesPage() {

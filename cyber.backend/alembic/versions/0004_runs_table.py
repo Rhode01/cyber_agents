@@ -1,7 +1,7 @@
 """Runs table for persistent pipeline status.
 
-Revision ID: 0006
-Revises: 0005
+Revision ID: 0004
+Revises: 0003
 Create date: 2026-08-06
 
 Adds the ``runs`` table so the Run Agent page can restore its state after a
@@ -17,8 +17,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0006"
-down_revision: str | None = "0005"
+revision: str = "0004"
+down_revision: str | None = "0003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

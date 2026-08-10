@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from ai_engine.parsers import ParseError
+from app.parsers import ParseError
 
 
 @dataclass

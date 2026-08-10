@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from cyberagents_contracts import DiscoveryReport
+from cyber_contracts import DiscoveryReport
 from httpx import AsyncClient
 
 from app.api.deps import get_ai_engine_client

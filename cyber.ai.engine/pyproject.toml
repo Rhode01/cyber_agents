@@ -1,5 +1,5 @@
 [project]
-name = "ai-engine"
+name = "cyber-ai-engine"
 version = "0.1.0"
 description = "Standalone LangGraph detection agents. Holds no database; talks to the backend over HTTP."
 requires-python = ">=3.12,<4.0"
@@ -14,19 +14,21 @@ dependencies = [
     "pydantic-settings>=2.14.2,<3.0.0",
     "httpx>=0.28.1,<0.29.0",
     "structlog>=26.1.0,<27.0.0",
-    "cyberagents-contracts",
-    "langchain-anthropic (>=1.5.3,<2.0.0)",
+    "langchain-anthropic>=1.5.3,<2.0.0",
+    # MCP *client* only. Tools live in cyber.mcp.server; this service calls them.
+    "mcp>=2.0.0,<3.0.0",
+    "cyber-contracts",
 ]
 
 # There are deliberately NO database libraries here. No sqlalchemy, no asyncpg,
-# no alembic, no psycopg. tests/test_no_database_imports.py enforces it.
+# no alembic, no psycopg. tests/unit/test_no_database_imports.py enforces it.
 
 [tool.poetry]
 package-mode = false
 
 [tool.poetry.dependencies]
 # Same shared contract as the backend, installed into THIS module's own venv.
-cyberagents-contracts = { path = "../contracts", develop = true }
+cyber-contracts = { path = "../cyber.contracts", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.16.1"
@@ -61,7 +63,7 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.12"
-files = ["ai_engine", "tests"]
+files = ["app", "tests"]
 strict = true
 warn_unused_ignores = true
 show_error_codes = true
@@ -75,7 +77,7 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 # Tool bodies stay fully annotated; only LangChain's @tool decorator itself is
 # opaque here, which is a consequence of the skip above rather than our code.
-module = ["ai_engine.agents.*.tools"]
+module = ["app.agents.*.tools"]
 disallow_untyped_decorators = false
 
 # ----------------------------------------------------------------- pytest --

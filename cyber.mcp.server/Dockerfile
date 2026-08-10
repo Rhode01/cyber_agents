@@ -1,4 +1,4 @@
-# Build context is mcpserver/ - this module has no path dependencies.
+# Build context is app/ - this module has no path dependencies.
 
 FROM python:3.12-slim AS builder
 
@@ -35,4 +35,4 @@ USER app
 
 EXPOSE 8004
 
-CMD ["uvicorn", "mcpserver.server:app", "--host", "0.0.0.0", "--port", "8004"]
+CMD ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8004"]

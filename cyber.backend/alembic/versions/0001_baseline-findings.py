@@ -7,7 +7,7 @@ Create date: 2026-08-03
 The single Phase 1 migration. agent and severity are VARCHAR with CHECK
 constraints rather than native PostgreSQL enums so that adding a value later is
 a constraint swap, not an ALTER TYPE. The Python StrEnums in
-cyberagents_contracts remain the source of truth.
+cyber_contracts remain the source of truth.
 """
 
 from __future__ import annotations

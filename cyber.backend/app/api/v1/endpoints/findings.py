@@ -10,14 +10,13 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from cyberagents_contracts import AgentKind, FindingType, Severity
+from cyber_contracts import AgentKind, FindingStatus, FindingType, Severity
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from pydantic import BaseModel, ConfigDict, Field
 
+from app import crud
 from app.api.deps import SessionDep
 from app.core.security import CurrentPrincipal
-from app.models.finding import Finding as FindingModel
 from app.schemas.finding import (
     FindingBatchCreate,
     FindingCreate,
@@ -29,12 +28,22 @@ from app.services.orchestration import persist_findings
 
 router = APIRouter(prefix="/findings", tags=["findings"])
 
+# The summary endpoint returns whole findings, so it needs a tighter ceiling than
+# the list endpoint. An asset with thousands of findings must not be a way to
+# pull the table through one request.
+SUMMARY_MAX_FINDINGS = 100
+
 
 class FindingSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     asset: str
-    count: int
-    severities: dict[str, int]
-    findings: list[FindingRead]
+    count: int = Field(description="Total findings for this asset, ignoring the page below.")
+    severities: dict[Severity, int] = Field(
+        description="Full tally across all findings for the asset, not just the page."
+    )
+    findings: list[FindingRead] = Field(description="The newest findings, capped.")
+    truncated: bool = Field(description="True when `count` exceeds the returned page.")
 
 
 @router.post(
@@ -79,33 +88,28 @@ async def list_findings(
     severity: Annotated[Severity | None, Query(description="Filter by severity.")] = None,
     finding_type: Annotated[FindingType | None, Query(description="Filter by kind.")] = None,
     scan_id: Annotated[UUID | None, Query(description="Only findings from this scan.")] = None,
+    run_id: Annotated[UUID | None, Query(description="Only findings from this run.")] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> FindingList:
     """Return a page of findings, newest observation first."""
     del principal
 
-    filters = []
-    if agent is not None:
-        filters.append(FindingModel.agent == agent.value)
-    if severity is not None:
-        filters.append(FindingModel.severity == severity.value)
-    if finding_type is not None:
-        filters.append(FindingModel.finding_type == finding_type.value)
-    if scan_id is not None:
-        filters.append(FindingModel.scan_id == scan_id)
-
-    count_stmt = select(func.count()).select_from(FindingModel).where(*filters)
-    total = int((await session.execute(count_stmt)).scalar_one())
-
-    page_stmt = (
-        select(FindingModel)
-        .where(*filters)
-        .order_by(FindingModel.detected_at.desc())
-        .limit(limit)
-        .offset(offset)
+    filters = crud.finding.build_filters(
+        agent=agent,
+        severity=severity,
+        finding_type=finding_type,
+        scan_id=scan_id,
+        run_id=run_id,
     )
-    rows = (await session.execute(page_stmt)).scalars().all()
+    total = await crud.finding.count(session, filters=filters)
+    rows = await crud.finding.get_multi(
+        session,
+        filters=filters,
+        order_by=crud.finding.newest_first(),
+        limit=limit,
+        offset=offset,
+    )
 
     return FindingList(
         items=[FindingRead.model_validate(row) for row in rows],
@@ -117,31 +121,38 @@ async def list_findings(
 
 @router.get("/summary", response_model=FindingSummary, summary="Summarize findings for an asset")
 async def summarize_findings(
-    asset: Annotated[str, Query(description="The asset to summarize.")],
+    asset: Annotated[str, Query(min_length=1, max_length=512, description="Asset to summarize.")],
     session: SessionDep,
     principal: CurrentPrincipal,
+    limit: Annotated[int, Query(ge=1, le=SUMMARY_MAX_FINDINGS)] = 25,
 ) -> FindingSummary:
-    """Return a summary of findings for a specific asset."""
+    """Summarize one asset: a full severity tally plus the newest findings.
+
+    The tally counts every finding for the asset; only the ``findings`` list is
+    paged. That split matters - a truncated tally would understate exposure,
+    which is the one number an operator reads first.
+    """
     del principal
-    
-    stmt = (
-        select(FindingModel)
-        .where(FindingModel.asset == asset)
-        .order_by(FindingModel.detected_at.desc())
+
+    filters = crud.finding.build_filters(asset=asset)
+    total = await crud.finding.count(session, filters=filters)
+
+    # One grouped query for the tally rather than counting in Python over every
+    # row, so the response cost does not grow with the asset's history.
+    severities = {severity: 0 for severity in Severity}
+    for severity, count in await crud.finding.count_by_severity(session, filters=filters):
+        severities[severity] = count
+
+    rows = await crud.finding.get_multi(
+        session, filters=filters, order_by=crud.finding.newest_first(), limit=limit
     )
-    rows = (await session.execute(stmt)).scalars().all()
-    
-    severities = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for row in rows:
-        sev = row.severity
-        if sev in severities:
-            severities[sev] += 1
-            
+
     return FindingSummary(
         asset=asset,
-        count=len(rows),
+        count=total,
         severities=severities,
         findings=[FindingRead.model_validate(row) for row in rows],
+        truncated=total > len(rows),
     )
 
 
@@ -153,7 +164,7 @@ async def get_finding(
 ) -> FindingRead:
     """Return a single finding by id."""
     del principal
-    row = await session.get(FindingModel, finding_id)
+    row = await crud.finding.get(session, finding_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
     return FindingRead.model_validate(row)
@@ -172,31 +183,38 @@ async def update_finding_status(
     observed, and rewriting that would destroy the audit trail.
     """
     del principal
-    row = await session.get(FindingModel, finding_id)
+    row = await crud.finding.get(session, finding_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
 
-    row.status = payload.status.value
-    await session.commit()
-    await session.refresh(row)
-    return FindingRead.model_validate(row)
+    updated = await crud.finding.update(session, db_obj=row, obj_in=payload)
+    return FindingRead.model_validate(updated)
 
 
 @router.delete(
     "/{finding_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete one finding",
+    response_model=FindingRead,
+    summary="Dismiss a finding as a false positive",
 )
-async def delete_finding(
+async def dismiss_finding(
     finding_id: UUID,
     session: SessionDep,
     principal: CurrentPrincipal,
-) -> None:
-    """Delete a single finding by id."""
+) -> FindingRead:
+    """Mark a finding ``false_positive`` rather than deleting the row.
+
+    This used to be a hard DELETE, which contradicted the rule the PATCH handler
+    states: a finding records what an agent observed at a point in time, and
+    destroying that destroys the audit trail. Dismissing is what an analyst
+    actually wants, it is reversible, and the row still evidences that the agent
+    saw something.
+    """
     del principal
-    row = await session.get(FindingModel, finding_id)
+    row = await crud.finding.get(session, finding_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
 
-    await session.delete(row)
-    await session.commit()
+    updated = await crud.finding.update(
+        session, db_obj=row, obj_in={"status": FindingStatus.false_positive.value}
+    )
+    return FindingRead.model_validate(updated)

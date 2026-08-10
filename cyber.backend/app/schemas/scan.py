@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from cyberagents_contracts import ScanFormat, ScanStatus
+from cyber_contracts import ScanFormat, ScanStatus
 from pydantic import BaseModel, ConfigDict, Field
 
 

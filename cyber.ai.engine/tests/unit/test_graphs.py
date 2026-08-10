@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from ai_engine.agents.common.state import initial_state
-from ai_engine.agents.network import graph as network_graph
-from ai_engine.agents.phishing import graph as phishing_graph
-from ai_engine.agents.vulnerability import graph as vulnerability_graph
-from ai_engine.agents.webapp import graph as webapp_graph
+from app.agents.common.state import initial_state
+from app.agents.network import graph as network_graph
+from app.agents.phishing import graph as phishing_graph
+from app.agents.vulnerability import graph as vulnerability_graph
+from app.agents.webapp import graph as webapp_graph
 
 GRAPH_MODULES = [
     pytest.param(vulnerability_graph, id="vulnerability"),

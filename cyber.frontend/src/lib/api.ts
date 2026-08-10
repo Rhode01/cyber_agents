@@ -13,7 +13,6 @@ import type {
   AgentRunRequest,
   AgentRunResponse,
   AgentKind,
-  Setting,
   DiscoveryReport,
   RunCreate,
   RunUpdate,
@@ -21,9 +20,7 @@ import type {
   RunList,
   ScanStatus,
   SystemModules,
-  EmailConnectionStatus,
-  EmailScanResponse,
-} from '@/lib/types'
+} from '@/types'
 
 export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'
 
@@ -128,17 +125,6 @@ export function runDiscovery(): Promise<DiscoveryReport> {
   return request<DiscoveryReport>('/discovery/run', { method: 'POST' })
 }
 
-export function fetchSettings(): Promise<Setting[]> {
-  return request<Setting[]>('/settings')
-}
-
-export function updateSetting(key: string, value: string): Promise<Setting> {
-  return request<Setting>('/settings', {
-    method: 'POST',
-    body: JSON.stringify({ key, value }),
-  })
-}
-
 export function createRun(payload: RunCreate): Promise<RunRead> {
   return request<RunRead>('/runs', {
     method: 'POST',
@@ -169,43 +155,8 @@ export function fetchSystemModules(): Promise<SystemModules> {
   return request<SystemModules>('/system/modules')
 }
 
-// --------------------------------------------------------------------------
-// Email OAuth integration
-// --------------------------------------------------------------------------
-
-export function fetchEmailStatus(): Promise<EmailConnectionStatus> {
-  return request<EmailConnectionStatus>('/email/status')
-}
-
-export type EmailProvider = 'google' | 'microsoft' | 'imap'
-
-export function emailScan(provider: EmailProvider, limit = 20): Promise<EmailScanResponse> {
-  return request<EmailScanResponse>('/email/scan', {
-    method: 'POST',
-    body: JSON.stringify({ provider, limit }),
-  })
-}
-
-export function emailDisconnect(provider: EmailProvider): Promise<void> {
-  return request<void>(`/email/disconnect/${provider}`, { method: 'DELETE' })
-}
-
-export interface ImapConnectPayload {
-  email: string
-  host: string
-  port: number
-  password: string
-  folder: string
-}
-
-export function imapConnect(payload: ImapConnectPayload): Promise<EmailConnectionStatus> {
-  return request<EmailConnectionStatus>('/email/connect/imap', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-/** Returns the backend URL to redirect the browser to for OAuth consent. */
-export function emailConnectUrl(provider: 'google' | 'microsoft'): string {
-  return `${BACKEND_URL}/email/connect/${provider}`
-}
+// The settings and email-connect clients were removed with their endpoints. The
+// backend stored OAuth client secrets, IMAP passwords and Gmail refresh tokens as
+// plaintext rows and served them back over an unauthenticated GET /settings.
+// Provider credentials now come from the environment only. Re-adding a mailbox
+// integration needs OAuth `state` + PKCE and encrypted token storage first.

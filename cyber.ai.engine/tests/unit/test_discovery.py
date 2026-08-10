@@ -12,9 +12,9 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from cyberagents_contracts import InterfaceInfo, ServicePort, WebHost
+from cyber_contracts import InterfaceInfo, ServicePort, WebHost
 
-from ai_engine.discovery import tools
+from app.discovery import tools
 
 
 def test_parse_iface_line_parses_a_realistic_ip_line() -> None:

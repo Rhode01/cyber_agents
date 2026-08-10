@@ -28,11 +28,11 @@ from typing import Final
 # Imported for the element type only. Parsing goes through defusedxml below.
 from xml.etree.ElementTree import Element
 
-from cyberagents_contracts import NormalizedScan, ScanFormat, ScanHost, ScanPort
+from cyber_contracts import NormalizedScan, ScanFormat, ScanHost, ScanPort
 from defusedxml.ElementTree import ParseError as DefusedParseError
 from defusedxml.ElementTree import fromstring
 
-from app.ingestion.errors import ScanParseError
+from app.services.ingestion.errors import ScanParseError
 
 MAX_HOSTS: Final = 4096
 MAX_PORTS_PER_HOST: Final = 512

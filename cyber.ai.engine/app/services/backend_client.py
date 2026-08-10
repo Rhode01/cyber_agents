@@ -14,10 +14,10 @@ from types import TracebackType
 from typing import Any, Self
 
 import httpx
-from cyberagents_contracts import FindingBatch
+from cyber_contracts import FindingBatch
 
-from ai_engine.core.config import Settings, get_settings
-from ai_engine.core.logging import get_logger
+from app.core.config import Settings, get_settings
+from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -1,5 +1,5 @@
-# The backend keeps its virtualenv inside its own directory: backend/.venv
-# Virtualenvs are never shared between modules.
+# The backend keeps its virtualenv inside its own directory:
+# cyber.backend/.venv. Virtualenvs are never shared between modules.
 [virtualenvs]
 in-project = true
 create = true

@@ -6,11 +6,11 @@ import Link from 'next/link'
 import {
   createRun,
   fetchLatestRun,
-  fetchSettings,
   runAgent,
   runDiscovery,
   updateRun,
 } from '@/lib/api'
+import { SeverityBadge } from '@/components/SeverityBadge'
 import type {
   AgentKind,
   AgentStatusSnapshot,
@@ -21,15 +21,7 @@ import type {
   RunRead,
   RunStatus,
   RunUpdate,
-} from '@/lib/types'
-
-const SEVERITY_LABEL: Record<string, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  info: 'Info',
-}
+} from '@/types'
 
 interface AgentDef {
   kind: AgentKind
@@ -94,17 +86,6 @@ function statusText(status: AgentStatusSnapshot): string | null {
   return null
 }
 
-function parsePipelineAgents(raw: string | undefined): AgentKind[] {
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((a): a is AgentKind => AGENTS.some((d) => d.kind === a))
-  } catch {
-    return []
-  }
-}
-
 export default function RunPipelinePage() {
   const [target, setTarget] = useState('')
   const [loading, setLoading] = useState(false)
@@ -154,17 +135,8 @@ export default function RunPipelinePage() {
   useEffect(() => {
     let cancelled = false
 
-    fetchSettings()
-      .then((data) => {
-        if (cancelled) return
-        const map: Record<string, string> = {}
-        data.forEach(s => (map[s.key] = s.value))
-        setPipelineMode(map['pipeline_mode'] === 'manual' ? 'manual' : 'auto')
-        setPipelineAgents(parsePipelineAgents(map['pipeline_agents']))
-        setMailSource(map['mail_source'] || '')
-      })
-      .catch(() => {})
-
+    // Pipeline defaults used to come from the backend settings table, which was
+    // removed along with the plaintext secret store. They are UI state now.
     fetchLatestRun()
       .then((run) => {
         if (!cancelled) restoreRun(run)
@@ -509,9 +481,7 @@ export default function RunPipelinePage() {
                       className="finding-row"
                       style={{ border: '1px solid var(--border)' }}
                     >
-                      <span className={`badge sev-${f.severity}`}>
-                        {SEVERITY_LABEL[f.severity] ?? f.severity}
-                      </span>
+                      <SeverityBadge severity={f.severity} size="sm" />
                       <div className="meta">
                         <div className="title">{f.title}</div>
                         <div className="sub">{f.asset ?? f.source}</div>

@@ -13,7 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from cyberagents_contracts.scan import NormalizedScan
+from cyber_contracts.scan import NormalizedScan
 
 
 class VulnerabilityAnalyzeRequest(BaseModel):

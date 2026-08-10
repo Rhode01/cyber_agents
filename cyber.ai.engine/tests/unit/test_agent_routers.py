@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from cyberagents_contracts import AgentKind, FindingBatch
+from cyber_contracts import AgentKind, FindingBatch
 from httpx import AsyncClient
 
 from tests.conftest import AGENTS

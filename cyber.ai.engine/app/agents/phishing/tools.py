@@ -9,7 +9,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from ai_engine.agents.common.scanning import duration_seconds, run_command
+from app.agents.common.scanning import duration_seconds, run_command
 
 _PHISHING_TIMEOUT_SECONDS = 45.0
 _MAX_LINKS = 20

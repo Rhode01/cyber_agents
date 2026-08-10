@@ -15,24 +15,24 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from cyberagents_contracts import AgentKind, FindingCreate, FindingType, Severity
+from cyber_contracts import AgentKind, FindingCreate, FindingType, Severity
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from ai_engine.agents.common.findings import resolve_finding_type
-from ai_engine.agents.common.placeholder import placeholder_finding
-from ai_engine.agents.common.targets import is_local_target
-from ai_engine.agents.common.untrusted import wrap_untrusted
-from ai_engine.agents.phishing.prompts import SYSTEM_PROMPT
-from ai_engine.agents.phishing.state import PhishingState
-from ai_engine.agents.phishing.tools import analyze_url_or_domain
-from ai_engine.core.logging import get_logger
-from ai_engine.llm.factory import (
+from app.agents.common.findings import resolve_finding_type
+from app.agents.common.placeholder import placeholder_finding
+from app.agents.common.targets import is_local_target
+from app.agents.common.untrusted import wrap_untrusted
+from app.agents.phishing.prompt import SYSTEM_PROMPT
+from app.agents.phishing.state import PhishingState
+from app.agents.phishing.tools import analyze_url_or_domain
+from app.core.logging import get_logger
+from app.llm.factory import (
     LlmNotConfiguredError,
     extract_message_text,
     require_configured_chat_model,
 )
-from ai_engine.parsers import ParseError
-from ai_engine.parsers import email as email_parser
+from app.parsers import ParseError
+from app.parsers import email as email_parser
 
 logger = get_logger(__name__)
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from cyberagents_contracts import AgentKind, FindingCreate
+from cyber_contracts import AgentKind, FindingCreate
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import AiEngineDep, SessionDep, SettingsDep
@@ -17,9 +17,9 @@ from app.core.logging import get_logger
 from app.core.security import CurrentPrincipal
 from app.schemas.agents import AgentRunRequest, AgentRunResponse
 from app.schemas.finding import FindingRead
-from app.services.ai_engine_client import AiEngineError
+from app.services.ai_engine.client import AiEngineError
 from app.services.orchestration import run_agent
-from app.worker.tasks import enqueue_agent_run
+from app.tasks.scan_tasks import enqueue_agent_run
 
 logger = get_logger(__name__)
 

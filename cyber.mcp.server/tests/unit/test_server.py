@@ -12,8 +12,8 @@ from collections.abc import Iterator
 import pytest
 from starlette.testclient import TestClient
 
-from mcpserver.config import Settings
-from mcpserver.server import MCP_ENDPOINT, app, describe_platform, mcp, mcp_app
+from app.config import Settings
+from app.server import MCP_ENDPOINT, app, describe_platform, mcp, mcp_app
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +66,7 @@ def test_health_endpoint_serves_ok(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["service"] == "mcpserver"
+    assert body["service"] == "app"
     assert body["mcp_endpoint"] == MCP_ENDPOINT
 
 

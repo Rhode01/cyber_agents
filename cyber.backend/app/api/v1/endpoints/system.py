@@ -7,6 +7,7 @@ can render a live module map instead of a hardcoded list of addresses.
 from __future__ import annotations
 
 import asyncio
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter
@@ -19,6 +20,23 @@ from app.api.deps import SessionDep, SettingsDep
 router = APIRouter(prefix="/system", tags=["system"])
 
 _MODULE_TIMEOUT_SECONDS = 3.0
+
+
+def _host_of(url: str) -> str:
+    """The host:port a URL points at, for display.
+
+    Derived rather than hardcoded: the previous version reported `localhost:8003`
+    whatever the configured URL was, so under compose the module map confidently
+    showed addresses that were not the ones being checked.
+
+    Uses ``hostname``/``port`` rather than ``netloc`` on purpose - ``netloc``
+    keeps any ``user:pass@`` prefix, which would put the database password in an
+    unauthenticated response.
+    """
+    parts = urlsplit(url)
+    if not parts.hostname:
+        return "(unknown)"
+    return f"{parts.hostname}:{parts.port}" if parts.port else parts.hostname
 
 
 class ModuleStatus(BaseModel):
@@ -49,7 +67,7 @@ async def _check_http(name: str, host: str, url: str) -> ModuleStatus:
 
 
 async def _check_redis(url: str) -> ModuleStatus:
-    host = url.replace("redis://", "")
+    host = _host_of(url)
     try:
         client = Redis.from_url(
             url,
@@ -68,7 +86,7 @@ async def _check_redis(url: str) -> ModuleStatus:
 @router.get("/modules", response_model=SystemModules, summary="Health of every platform module")
 async def system_modules(session: SessionDep, settings: SettingsDep) -> SystemModules:
     """Ping the database, redis, ai.engine, and the MCP server concurrently."""
-    db_host = settings.database_url.split("@")[-1]
+    db_host = _host_of(settings.database_url)
 
     async def _check_db() -> ModuleStatus:
         try:
@@ -82,7 +100,11 @@ async def system_modules(session: SessionDep, settings: SettingsDep) -> SystemMo
     results = await asyncio.gather(
         _check_db(),
         _check_redis(settings.redis_url),
-        _check_http("ai.engine", "localhost:8003", f"{settings.ai_engine_url}/health"),
-        _check_http("mcpserver", "localhost:8004", f"{settings.mcp_server_url}/health"),
+        _check_http(
+            "ai.engine", _host_of(settings.ai_engine_url), f"{settings.ai_engine_url}/health"
+        ),
+        _check_http(
+            "mcpserver", _host_of(settings.mcp_server_url), f"{settings.mcp_server_url}/health"
+        ),
     )
     return SystemModules(items=list(results))

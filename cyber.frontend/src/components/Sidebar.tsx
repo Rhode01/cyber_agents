@@ -13,7 +13,6 @@ const NAV = [
   { href: '/services', label: 'Services' },
   { href: '/findings', label: 'Findings' },
   { href: '/reports', label: 'Reports' },
-  { href: '/settings', label: 'Settings' },
 ]
 
 type ScanState =

@@ -8,8 +8,8 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from ai_engine.agents.common.scanning import duration_seconds, run_command
-from ai_engine.agents.common.targets import is_local_target
+from app.agents.common.scanning import duration_seconds, run_command
+from app.agents.common.targets import is_local_target
 
 _NUCLEI_TIMEOUT_SECONDS = 180.0
 

@@ -4,15 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 
 import { fetchFindings } from '@/lib/api'
-import type { Finding, Severity } from '@/lib/types'
-
-const SEVERITY_META: Record<Severity, { label: string; color: string }> = {
-  critical: { label: 'Critical', color: '#f43f5e' },
-  high: { label: 'High', color: '#fb923c' },
-  medium: { label: 'Medium', color: '#fbbf24' },
-  low: { label: 'Low', color: '#38bdf8' },
-  info: { label: 'Info', color: '#64748b' },
-}
+import { SeverityBadge } from '@/components/SeverityBadge'
+import { SEVERITY_LABEL, SEVERITY_ORDER, emptySeverityCounts } from '@/lib/severity'
+import type { Finding } from '@/types'
 
 function formatWhen(iso: string): string {
   const then = new Date(iso)
@@ -38,7 +32,7 @@ export default function FindingsPage() {
   }, [])
 
   const bySeverity = useMemo(() => {
-    const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+    const counts = emptySeverityCounts()
     for (const f of data?.items ?? []) counts[f.severity]++
     return counts
   }, [data])
@@ -73,9 +67,9 @@ export default function FindingsPage() {
               <div className="label">Total</div>
               <div className="value">{data.total}</div>
             </div>
-            {(Object.keys(SEVERITY_META) as Severity[]).map((sev) => (
+            {SEVERITY_ORDER.map((sev) => (
               <div key={sev} className={`stat-card ${sev}`}>
-                <div className="label">{SEVERITY_META[sev].label}</div>
+                <div className="label">{SEVERITY_LABEL[sev]}</div>
                 <div className="value">{bySeverity[sev]}</div>
               </div>
             ))}
@@ -94,9 +88,7 @@ export default function FindingsPage() {
                   className="finding-row"
                   style={{ borderBottom: '1px solid var(--border)', borderRadius: 0 }}
                 >
-                  <span className={`badge sev-${finding.severity}`}>
-                    {SEVERITY_META[finding.severity].label}
-                  </span>
+                  <SeverityBadge severity={finding.severity} />
                   <div className="meta">
                     <div className="title">{finding.title}</div>
                     <div className="sub">

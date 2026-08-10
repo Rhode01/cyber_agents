@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import time
 
-from cyberagents_contracts import DiscoveryReport
+from cyber_contracts import DiscoveryReport
 from fastapi import APIRouter
 
-from ai_engine.core.logging import get_logger
-from ai_engine.discovery.tools import run_discovery
+from app.core.logging import get_logger
+from app.discovery.tools import run_discovery
 
 logger = get_logger(__name__)
 

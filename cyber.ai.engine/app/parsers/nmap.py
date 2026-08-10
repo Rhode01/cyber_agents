@@ -21,7 +21,7 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
-from ai_engine.parsers import ParseError
+from app.parsers import ParseError
 
 
 @dataclass

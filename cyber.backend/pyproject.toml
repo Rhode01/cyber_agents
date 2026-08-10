@@ -1,5 +1,5 @@
 [project]
-name = "backend"
+name = "cyber-backend"
 version = "0.1.0"
 description = "Cybersecurity Agents Platform backend - owns all persistence, migrations, and orchestration."
 requires-python = ">=3.12,<4.0"
@@ -21,7 +21,7 @@ dependencies = [
     # Blocks XXE and entity expansion (billion laughs) on uploaded scan XML, and
     # keeps ruff's S314/S405/S320 satisfied without a noqa.
     "defusedxml>=0.7.1,<0.8.0",
-    "cyberagents-contracts",
+    "cyber-contracts",
 ]
 
 [tool.poetry]
@@ -31,7 +31,7 @@ package-mode = false
 [tool.poetry.dependencies]
 # The shared Finding contract lives at the repository root and is installed
 # into THIS module's own virtualenv. No virtualenv is shared between modules.
-cyberagents-contracts = { path = "../contracts", develop = true }
+cyber-contracts = { path = "../cyber.contracts", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.16.1"

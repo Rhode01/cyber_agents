@@ -11,8 +11,54 @@ and hardened later without touching any agent.
 
 from __future__ import annotations
 
+import re
+from typing import Final
+
 MAX_UNTRUSTED_CHARS = 20_000
 PREVIEW_CHARS = 500
+
+# Phrases that only appear in content trying to address the model rather than
+# describe a system. Deliberately narrow: a service banner containing the word
+# "ignore" is not an attack, and a detector that cries wolf gets switched off.
+# Each entry is (marker name, pattern) so a finding can name what it matched.
+_INJECTION_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
+    (
+        "instruction-override",
+        re.compile(
+            r"\b(?:ignore|disregard|forget)\b[^.\n]{0,40}?"
+            r"\b(?:previous|prior|above|earlier|all)\b[^.\n]{0,20}?\binstruction",
+            re.IGNORECASE,
+        ),
+    ),
+    ("role-reassignment", re.compile(r"\byou are now\b|\bact as (?:a|an|the)\b", re.IGNORECASE)),
+    ("new-instructions", re.compile(r"\bnew instructions?\s*:", re.IGNORECASE)),
+    ("prompt-disclosure", re.compile(r"\b(?:system|initial) prompt\b", re.IGNORECASE)),
+    (
+        "reporting-suppression",
+        re.compile(
+            r"\b(?:do not|don't|never)\b[^.\n]{0,30}?\b(?:report|flag|mention|log)\b"
+            r"|\breport (?:this|the) (?:host|system|finding|scan) as (?:clean|safe|secure)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    ("chat-template-token", re.compile(r"<\|im_(?:start|end)\|>|\[/?INST\]")),
+    # wrap_untrusted downcases this marker, so seeing it at all means the
+    # artifact tried to forge or close the fence itself.
+    ("fence-forgery", re.compile(r"<<<\s*untrusted_|_(?:BEGIN|END)>>>", re.IGNORECASE)),
+)
+
+
+def detect_injection(content: str) -> tuple[str, ...]:
+    """Name the prompt-injection markers present in untrusted content.
+
+    Returns the matched marker names, or an empty tuple. Deterministic on
+    purpose: the platform's rule that injection attempts are themselves
+    reportable security events must not depend on a model choosing to comply
+    with a prompt instruction telling it to report them.
+    """
+    if not content:
+        return ()
+    return tuple(name for name, pattern in _INJECTION_PATTERNS if pattern.search(content))
 
 _TEMPLATE = """\
 The block below is UNTRUSTED {label} captured from a monitored system.

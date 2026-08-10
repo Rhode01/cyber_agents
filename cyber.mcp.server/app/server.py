@@ -18,10 +18,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from mcpserver import __version__
-from mcpserver.config import get_settings
+from app import __version__
+from app.config import get_settings
 
-logger = logging.getLogger("mcpserver")
+logger = logging.getLogger("app")
 
 settings = get_settings()
 
@@ -159,7 +159,7 @@ async def health(request: Request) -> JSONResponse:
     return JSONResponse(
         {
             "status": "ok",
-            "service": "mcpserver",
+            "service": "app",
             "version": __version__,
             "server_name": settings.mcp_server_name,
             "transport": "streamable-http",
@@ -174,7 +174,7 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
     del app
     global http_client
     logging.basicConfig(level=getattr(logging, settings.log_level), format="%(message)s")
-    logger.info("mcpserver starting: name=%s port=%s", settings.mcp_server_name, settings.mcp_port)
+    logger.info("app starting: name=%s port=%s", settings.mcp_server_name, settings.mcp_port)
 
     http_client = httpx.AsyncClient(
         base_url=settings.backend_url,
@@ -184,7 +184,7 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
     async with mcp.session_manager.run(), http_client:
         yield
 
-    logger.info("mcpserver stopped")
+    logger.info("app stopped")
 
 
 app = Starlette(
@@ -199,7 +199,7 @@ app = Starlette(
 def main() -> None:
     """Run over stdio, for an MCP host that launches this as a subprocess."""
     logging.basicConfig(level=getattr(logging, settings.log_level), format="%(message)s")
-    logger.info("mcpserver starting on stdio: name=%s", settings.mcp_server_name)
+    logger.info("app starting on stdio: name=%s", settings.mcp_server_name)
     mcp.run()
 
 

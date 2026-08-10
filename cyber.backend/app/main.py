@@ -1,9 +1,3 @@
-"""Backend FastAPI application.
-
-Serves the frontend's API surface, owns persistence, and calls the ai.engine
-over HTTP. Nothing here creates a database connection at import time, so the
-module can be imported by tests and by Alembic without a live server.
-"""
 
 from __future__ import annotations
 
@@ -14,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.router import api_router
+from app.api.v1.api import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine

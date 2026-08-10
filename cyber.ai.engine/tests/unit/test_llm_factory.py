@@ -6,8 +6,8 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 
-from ai_engine.core.config import Settings, get_settings
-from ai_engine.llm.factory import (
+from app.core.config import Settings, get_settings
+from app.llm.factory import (
     LlmNotConfiguredError,
     describe_model,
     extract_message_text,

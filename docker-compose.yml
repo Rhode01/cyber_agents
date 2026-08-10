@@ -38,10 +38,11 @@ services:
 
   # -------------------------------------------------------------- backend --
   # Owns all persistence, all migrations, and pipeline orchestration.
+  # Build context is the repo root so the cyber.contracts path dependency resolves.
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: cyber.backend/Dockerfile
     image: cyber-agents/backend:dev
     restart: unless-stopped
     env_file:
@@ -52,13 +53,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
       REDIS_URL: redis://redis:6379/0
-      AI_ENGINE_URL: http://host.docker.internal:8003
+      AI_ENGINE_URL: http://ai-engine:8003
+      MCP_SERVER_URL: http://mcpserver:8004
       CORS_ORIGINS: '["http://localhost:3000"]'
     ports:
       - "8000:8000"
-    # ai-engine runs on the host network, so reach it through the host gateway.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy
@@ -81,10 +80,10 @@ services:
   worker:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: cyber.backend/Dockerfile
     image: cyber-agents/backend:dev
     restart: unless-stopped
-    command: ["arq", "app.worker.settings.WorkerSettings"]
+    command: ["arq", "app.tasks.worker.WorkerSettings"]
     env_file:
       - path: .env
         required: false
@@ -93,16 +92,14 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
       REDIS_URL: redis://redis:6379/0
-      AI_ENGINE_URL: http://host.docker.internal:8003
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      AI_ENGINE_URL: http://ai-engine:8003
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "arq", "--check", "app.worker.settings.WorkerSettings"]
+      test: ["CMD", "arq", "--check", "app.tasks.worker.WorkerSettings"]
       interval: 15s
       timeout: 15s
       retries: 4
@@ -110,16 +107,18 @@ services:
 
   # ------------------------------------------------------------ ai.engine --
   # Standalone LangGraph service. Holds no database; talks to backend by HTTP.
+  #
+  # It runs on the compose network, not the host network. The agents scan targets
+  # they are given; nothing here needs to enumerate the host's own interfaces, so
+  # the service keeps normal container isolation. If a future phase genuinely
+  # needs host interface visibility, that should be an explicit, documented opt-in
+  # rather than the default for every deployment.
   ai-engine:
     build:
       context: .
-      dockerfile: ai.engine/Dockerfile
+      dockerfile: cyber.ai.engine/Dockerfile
     image: cyber-agents/ai-engine:dev
     restart: unless-stopped
-    # The scanner agent must see the host's interfaces (wlan0, docker0, ...) to
-    # enumerate and sweep the LAN, so it shares the host network stack. The
-    # backend talks to it through the host gateway (host.docker.internal).
-    network_mode: host
     env_file:
       - path: .env
         required: false
@@ -129,8 +128,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      # Backend publishes 8000 on the host; with host networking localhost works.
-      BACKEND_URL: http://localhost:8000
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "8003:8003"
     healthcheck:
       test:
         - CMD
@@ -147,7 +147,7 @@ services:
   # ------------------------------------------------------------- frontend --
   frontend:
     build:
-      context: ./frontend
+      context: ./cyber.frontend
       args:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
     image: cyber-agents/frontend:dev
@@ -170,8 +170,8 @@ services:
   # ------------------------------------------------------------ mcpserver --
   mcpserver:
     build:
-      context: ./mcpserver
-    image: cyber-agents/mcpserver:dev
+      context: ./cyber.mcp.server
+    image: cyber-agents/mcp-server:dev
     restart: unless-stopped
     env_file:
       - path: .env

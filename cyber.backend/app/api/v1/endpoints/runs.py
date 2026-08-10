@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import select
 
+from app import crud
 from app.api.deps import SessionDep
 from app.core.security import CurrentPrincipal
 from app.models.run import Run as RunModel
@@ -49,10 +51,7 @@ async def create_run(
 ) -> RunRead:
     """Start a new run with every agent pending."""
     del principal
-    row = RunModel(target=payload.target, mode=payload.mode)
-    session.add(row)
-    await session.commit()
-    await session.refresh(row)
+    row = await crud.run.create(session, obj_in=payload)
     return _to_read(row)
 
 
@@ -60,13 +59,19 @@ async def create_run(
 async def list_runs(
     session: SessionDep,
     principal: CurrentPrincipal,
-    limit: int = 20,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> RunList:
-    """Return the most recent runs, newest first."""
+    """Return a page of runs, newest first.
+
+    ``limit`` is validated rather than clamped: the previous ``min(limit, 100)``
+    accepted a negative value, which reached ``LIMIT -1`` and produced a 500.
+    """
     del principal
-    total = int((await session.execute(select(func.count()).select_from(RunModel))).scalar_one())
-    stmt = select(RunModel).order_by(RunModel.created_at.desc()).limit(min(limit, 100))
-    rows = (await session.execute(stmt)).scalars().all()
+    total = await crud.run.count(session)
+    rows = await crud.run.get_multi(
+        session, order_by=crud.run.newest_first(), limit=limit, offset=offset
+    )
     return RunList(items=[_to_read(row) for row in rows], total=total)
 
 
@@ -113,7 +118,7 @@ async def get_run(
 ) -> RunRead:
     """Return a single run by id."""
     del principal
-    row = await session.get(RunModel, run_id)
+    row = await crud.run.get(session, run_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     return _to_read(row)
@@ -128,7 +133,7 @@ async def update_run(
 ) -> RunRead:
     """Update a run's live state: per-agent statuses, discovery, or completion."""
     del principal
-    row = await session.get(RunModel, run_id)
+    row = await crud.run.get(session, run_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 

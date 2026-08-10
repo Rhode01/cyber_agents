@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from cyberagents_contracts import AgentKind, FindingStatus, FindingType, Severity
+from cyber_contracts import AgentKind, FindingStatus, FindingType, Severity
 from sqlalchemy import (
     CheckConstraint,
     DateTime,

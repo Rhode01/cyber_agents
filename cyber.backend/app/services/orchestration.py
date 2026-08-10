@@ -2,22 +2,23 @@
 
 Flow: artifact -> backend -> ai.engine agent -> Finding objects -> PostgreSQL
 
-Phase 2: Adds basic deduplication against recent findings to prevent noisy
-scanners from flooding the database with duplicate alerts.
+Deduplication keeps a noisy scanner from writing the same observation twice
+within one run or one scan. It is deliberately scoped to that run or scan - see
+``app.crud.crud_finding.DedupeKey`` for why suppressing across runs would make a
+re-scan look clean.
 """
 
 from __future__ import annotations
 
-import datetime
-
-from cyberagents_contracts import AgentKind, FindingCreate
-from sqlalchemy import select
+from cyber_contracts import AgentKind, FindingCreate
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import crud
 from app.core.logging import get_logger
+from app.crud.crud_finding import dedupe_key
 from app.models.finding import Finding as FindingModel
 from app.schemas.agents import AgentRunRequest
-from app.services.ai_engine_client import AiEngineClient
+from app.services.ai_engine.client import AiEngineClient
 
 logger = get_logger(__name__)
 
@@ -54,61 +55,48 @@ def to_model(finding: FindingCreate) -> FindingModel:
 async def persist_findings(
     session: AsyncSession, findings: list[FindingCreate]
 ) -> list[FindingModel]:
-    """Store findings and return the persisted rows, deduplicating first.
-    
-    A finding is considered a duplicate if there is an existing finding for the
-    same agent, asset, and exact title within the last 24 hours.
+    """Store findings and return the persisted rows, suppressing duplicates.
+
+    Two findings are the same observation when their full
+    ``crud_finding.DedupeKey`` matches - agent, asset, port, service, kind, title
+    **and** the run or scan that produced them. Including the run means a
+    re-scan always records what it saw; excluding port and service (as the
+    previous implementation did) collapsed genuinely different findings on the
+    same host into one.
     """
     if not findings:
         return []
 
-    # Get recent findings for the same assets
-    agents = list({f.agent.value for f in findings})
-    assets = list({f.asset for f in findings if f.asset})
-    titles = list({f.title for f in findings})
-    
-    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=1)
-    
-    # Query for existing matching findings
-    stmt = (
-        select(FindingModel.agent, FindingModel.asset, FindingModel.title)
-        .where(
-            FindingModel.agent.in_(agents),
-            FindingModel.title.in_(titles),
-            FindingModel.detected_at >= cutoff
-        )
-    )
-    if assets:
-        stmt = stmt.where(FindingModel.asset.in_(assets))
-        
-    existing = await session.execute(stmt)
-    # Create a set of (agent, asset, title) tuples for O(1) lookup
-    existing_set = {tuple(row) for row in existing.all()}
+    seen = await crud.finding.existing_dedupe_keys(session, findings=findings)
 
     rows: list[FindingModel] = []
-    skipped = 0
-    
-    for f in findings:
-        key = (f.agent.value, f.asset, f.title)
-        if key in existing_set:
-            skipped += 1
+    suppressed: list[str] = []
+
+    for candidate in findings:
+        key = dedupe_key(candidate)
+        if key in seen:
+            suppressed.append(candidate.title)
             continue
-            
-        rows.append(to_model(f))
-        # Add to set so we don't insert duplicates within the same batch
-        existing_set.add(key)
+        rows.append(to_model(candidate))
+        # Add as we go so a batch cannot insert the same observation twice.
+        seen.add(key)
+
+    if suppressed:
+        # Named rather than counted: "3 suppressed" is not actionable, and a
+        # surprising title here is how a too-broad dedupe key gets noticed.
+        logger.info(
+            "findings.deduplicated",
+            count=len(suppressed),
+            titles=sorted(set(suppressed))[:10],
+        )
 
     if not rows:
-        logger.info("findings.persisted", count=0, deduplicated=skipped)
+        logger.info("findings.persisted", count=0, deduplicated=len(suppressed))
         return []
 
-    session.add_all(rows)
-    await session.commit()
-    for row in rows:
-        await session.refresh(row)
-
-    logger.info("findings.persisted", count=len(rows), deduplicated=skipped)
-    return rows
+    persisted = await crud.finding.create_many(session, rows=rows)
+    logger.info("findings.persisted", count=len(persisted), deduplicated=len(suppressed))
+    return persisted
 
 
 async def run_agent(
@@ -124,20 +112,9 @@ async def run_agent(
     """
     logger.info("agent.run.start", agent=agent.value, source=request.source, asset=request.asset)
 
-    from app.models.setting import Setting as SettingModel
-    
-    # Inject LLM credentials and config from settings if present
-    for key in ("llm_provider", "llm_model", "llm_base_url", "llm_api_key"):
-        setting = await session.get(SettingModel, key)
-        if setting and setting.value:
-            request.context[key] = setting.value
-            
-    # Fallback to old key if new key isn't set
-    if "llm_api_key" not in request.context:
-        api_key_setting = await session.get(SettingModel, "openai_api_key")
-        if api_key_setting and api_key_setting.value:
-            request.context["llm_api_key"] = api_key_setting.value
-
+    # No credentials are injected into the request. The ai.engine resolves its own
+    # model and API key from its own environment, so a key never crosses this
+    # boundary in a request body and is never stored in the database.
     batch = await client.analyze(agent, request)
 
     if not request.persist:

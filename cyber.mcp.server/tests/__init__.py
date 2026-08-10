@@ -1,1 +1,1 @@
-"""mcpserver tests."""
+"""app tests."""

@@ -5,15 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 import { fetchFindingById, deleteFinding } from '@/lib/api'
-import type { Finding } from '@/lib/types'
-
-const SEVERITY_LABEL: Record<string, string> = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  info: 'Info',
-}
+import { SeverityBadge } from '@/components/SeverityBadge'
+import type { Finding } from '@/types'
 
 export default function FindingDetailPage() {
   const params = useParams()
@@ -81,9 +74,7 @@ export default function FindingDetailPage() {
             >
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span className={`badge sev-${finding.severity}`}>
-                    {SEVERITY_LABEL[finding.severity] ?? finding.severity}
-                  </span>
+                  <SeverityBadge severity={finding.severity} />
                   <span className={`agent-chip agent-${finding.agent}`}>{finding.agent}</span>
                 </div>
                 <h2 style={{ fontSize: '1.15rem', margin: 0 }}>{finding.title}</h2>

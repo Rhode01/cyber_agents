@@ -2,9 +2,9 @@
 
 Run with:
 
-    poetry run arq app.worker.settings.WorkerSettings
+    poetry run arq app.tasks.worker.WorkerSettings
 
-Liveness is checked with ``arq --check app.worker.settings.WorkerSettings``,
+Liveness is checked with ``arq --check app.tasks.worker.WorkerSettings``,
 which is what the compose healthcheck uses.
 """
 
@@ -19,7 +19,7 @@ from arq.cron import CronJob
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine
-from app.worker.tasks import agent_run, analyze_scan, ping
+from app.tasks.scan_tasks import agent_run, analyze_scan, ping
 
 logger = get_logger(__name__)
 

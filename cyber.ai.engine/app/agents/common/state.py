@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, NotRequired, TypedDict
 
-from cyberagents_contracts import FindingCreate
+from cyber_contracts import FindingCreate
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 

@@ -6,9 +6,9 @@ Bump ``__version__`` on any field change, then run ``make lock`` so both
 consumers re-resolve the path dependency.
 """
 
-from cyberagents_contracts.analyze import VulnerabilityAnalyzeRequest
-from cyberagents_contracts.discovery import DiscoveryReport, InterfaceInfo, ServicePort, WebHost
-from cyberagents_contracts.finding import (
+from cyber_contracts.analyze import VulnerabilityAnalyzeRequest
+from cyber_contracts.discovery import DiscoveryReport, InterfaceInfo, ServicePort, WebHost
+from cyber_contracts.finding import (
     SEVERITY_ORDER,
     AgentKind,
     Finding,
@@ -18,15 +18,17 @@ from cyberagents_contracts.finding import (
     FindingType,
     Severity,
 )
-from cyberagents_contracts.scan import (
+from cyber_contracts.scan import (
     NormalizedScan,
     ScanFormat,
     ScanHost,
     ScanPort,
     ScanStatus,
 )
+from cyber_contracts.security import INTERNAL_KEY_HEADER, matches_internal_key
 
 __all__ = [
+    "INTERNAL_KEY_HEADER",
     "SEVERITY_ORDER",
     "AgentKind",
     "DiscoveryReport",
@@ -45,6 +47,7 @@ __all__ = [
     "Severity",
     "VulnerabilityAnalyzeRequest",
     "WebHost",
+    "matches_internal_key",
 ]
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

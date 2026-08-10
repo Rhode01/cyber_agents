@@ -8,7 +8,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from ai_engine.agents.common.scanning import duration_seconds, run_command
+from app.agents.common.scanning import duration_seconds, run_command
 
 _SNAPSHOT_TIMEOUT_SECONDS = 25.0
 _MAX_SNAPSHOT_LINES = 300

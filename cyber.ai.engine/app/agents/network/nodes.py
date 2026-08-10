@@ -16,22 +16,22 @@ import json
 from collections import defaultdict
 from typing import Any
 
-from cyberagents_contracts import AgentKind, FindingCreate, FindingType, Severity
+from cyber_contracts import AgentKind, FindingCreate, FindingType, Severity
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from ai_engine.agents.common.findings import resolve_finding_type
-from ai_engine.agents.common.placeholder import placeholder_finding
-from ai_engine.agents.common.untrusted import wrap_untrusted
-from ai_engine.agents.network.prompts import SYSTEM_PROMPT
-from ai_engine.agents.network.state import NetworkState
-from ai_engine.agents.network.tools import capture_traffic_snapshot
-from ai_engine.core.logging import get_logger
-from ai_engine.llm.factory import (
+from app.agents.common.findings import resolve_finding_type
+from app.agents.common.placeholder import placeholder_finding
+from app.agents.common.untrusted import wrap_untrusted
+from app.agents.network.prompt import SYSTEM_PROMPT
+from app.agents.network.state import NetworkState
+from app.agents.network.tools import capture_traffic_snapshot
+from app.core.logging import get_logger
+from app.llm.factory import (
     LlmNotConfiguredError,
     extract_message_text,
     require_configured_chat_model,
 )
-from ai_engine.parsers import ParseError, suricata, zeek
+from app.parsers import ParseError, suricata, zeek
 
 logger = get_logger(__name__)
 

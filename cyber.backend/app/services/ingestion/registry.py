@@ -9,10 +9,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Final
 
-from cyberagents_contracts import NormalizedScan, ScanFormat
+from cyber_contracts import NormalizedScan, ScanFormat
 
-from app.ingestion.errors import ScanParseError, UnsupportedScanFormatError
-from app.ingestion.nmap import parse_nmap_xml
+from app.services.ingestion.errors import ScanParseError, UnsupportedScanFormatError
+from app.services.ingestion.nmap import parse_nmap_xml
 
 # Root elements that identify a format without parsing the whole document.
 _ROOT_MARKERS: Final[tuple[tuple[str, ScanFormat], ...]] = (

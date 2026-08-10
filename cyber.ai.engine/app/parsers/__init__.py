@@ -6,7 +6,7 @@ pure functions: no I/O, no side effects, no database access.
 
 Usage::
 
-    from ai_engine.parsers import nmap, trivy, zap, email as email_parser
+    from app.parsers import nmap, trivy, zap, email as email_parser
 
 Parsers raise ``ParseError`` on completely unparseable input so the caller can
 decide whether to fall back to raw-text analysis or reject the request early.

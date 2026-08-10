@@ -4,22 +4,20 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 
 import { fetchBackendHealth, fetchFindings, fetchSystemModules, runAgent, createRun, updateRun, fetchRuns } from '@/lib/api'
-import type { AgentTraceEntry, BackendHealth, Finding, ModuleStatus, RunRead, Severity } from '@/lib/types'
+import { SeverityBadge, SeverityDot } from '@/components/SeverityBadge'
+import {
+  SEVERITY_CLASS,
+  SEVERITY_LABEL,
+  SEVERITY_ORDER,
+  emptySeverityCounts,
+} from '@/lib/severity'
+import { cn } from '@/lib/utils'
+import type { AgentTraceEntry, BackendHealth, Finding, ModuleStatus, RunRead } from '@/types'
 
 type HealthState =
   | { kind: 'loading' }
   | { kind: 'ok'; health: BackendHealth }
   | { kind: 'error'; message: string }
-
-const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
-
-const SEVERITY_META: Record<Severity, { label: string; color: string }> = {
-  critical: { label: 'Critical', color: '#ef4444' },
-  high: { label: 'High', color: '#f97316' },
-  medium: { label: 'Medium', color: '#eab308' },
-  low: { label: 'Low', color: '#38bdf8' },
-  info: { label: 'Info', color: '#d946ef' },
-}
 
 const MODULES: ReadonlyArray<{ name: string; address: string }> = [
   { name: 'frontend', address: 'localhost:3000' },
@@ -51,9 +49,6 @@ function AgentChip({ agent }: { agent: string }) {
   return <span className={`agent-chip agent-${agent}`}>{agent}</span>
 }
 
-function SeverityBadge({ severity }: { severity: Severity }) {
-  return <span className={`badge sev-${severity}`}>{SEVERITY_META[severity].label}</span>
-}
 
 export default function Home() {
   const [health, setHealth] = useState<HealthState>({ kind: 'loading' })
@@ -155,7 +150,7 @@ export default function Home() {
   }
 
   const stats = useMemo(() => {
-    const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+    const counts = emptySeverityCounts()
     const byAgent: Record<string, number> = {}
     for (const f of findings ?? []) {
       counts[f.severity] = (counts[f.severity] ?? 0) + 1
@@ -165,7 +160,7 @@ export default function Home() {
     return { counts, byAgent, total }
   }, [findings])
 
-  const maxSeverity = Math.max(1, ...SEVERITIES.map((s) => stats.counts[s]))
+  const maxSeverity = Math.max(1, ...SEVERITY_ORDER.map((s) => stats.counts[s]))
   const recent = findings?.slice(0, 6) ?? []
 
   const criticalPct = stats.total ? (stats.counts.critical / stats.total) * 100 : 0
@@ -245,25 +240,19 @@ export default function Home() {
           ) : (
             <>
               <div className="dist-bar">
-                {SEVERITIES.map((sev) => (
+                {SEVERITY_ORDER.map((sev) => (
                   <div
                     key={sev}
-                    className="dist-seg"
-                    style={{
-                      width: `${(stats.counts[sev] / maxSeverity) * 100}%`,
-                      background: SEVERITY_META[sev].color,
-                    }}
+                    className={cn('dist-seg', SEVERITY_CLASS[sev].fill)}
+                    style={{ width: `${(stats.counts[sev] / maxSeverity) * 100}%` }}
                   />
                 ))}
               </div>
               <div className="dist-legend">
-                {SEVERITIES.map((sev) => (
+                {SEVERITY_ORDER.map((sev) => (
                   <div key={sev} className="item">
-                    <span
-                      className="swatch"
-                      style={{ background: SEVERITY_META[sev].color }}
-                    />
-                    {SEVERITY_META[sev].label}
+                    <SeverityDot severity={sev} className="size-2.5" />
+                    {SEVERITY_LABEL[sev]}
                     <strong style={{ color: 'var(--text)' }}>{stats.counts[sev]}</strong>
                   </div>
                 ))}
@@ -359,11 +348,7 @@ export default function Home() {
             <Link href="/run" style={{ fontWeight: 700 }}>
               Run Agent
             </Link>{' '}
-            page or scan an inbox from{' '}
-            <Link href="/settings/email-connect" style={{ fontWeight: 700 }}>
-              Email Integration
-            </Link>
-            .
+            page.
           </p>
         )}
 

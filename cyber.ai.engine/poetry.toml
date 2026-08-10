@@ -1,5 +1,5 @@
-# The ai.engine keeps its virtualenv inside its own directory: ai.engine/.venv
-# Virtualenvs are never shared between modules.
+# The ai.engine keeps its virtualenv inside its own directory:
+# cyber.ai.engine/.venv. Virtualenvs are never shared between modules.
 [virtualenvs]
 in-project = true
 create = true

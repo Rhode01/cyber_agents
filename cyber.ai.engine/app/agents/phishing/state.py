@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, NotRequired
 
-from ai_engine.agents.common.state import AgentState
+from app.agents.common.state import AgentState
 
 
 class PhishingState(AgentState):

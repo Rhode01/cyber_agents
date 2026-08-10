@@ -83,12 +83,6 @@ export interface AgentRunResponse {
   findings: Finding[]
 }
 
-export interface Setting {
-  key: string
-  value: string
-  description?: string | null
-}
-
 export interface InterfaceInfo {
   name: string
   ip: string
@@ -125,7 +119,7 @@ export interface DiscoveryReport {
   notes: string[]
 }
 
-/** Pipeline configuration read from the backend's settings table. */
+/** Pipeline configuration chosen in the UI for one run. */
 export interface PipelineConfig {
   mode: PipelineMode
   agents: AgentKind[]
@@ -189,16 +183,5 @@ export interface SystemModules {
   items: ModuleStatus[]
 }
 
-export interface EmailConnectionStatus {
-  google_connected: boolean
-  microsoft_connected: boolean
-  imap_connected: boolean
-  imap_account: string | null
-}
-
-export interface EmailScanResponse {
-  provider: string
-  emails_fetched: number
-  findings_total: number
-  findings: Finding[]
-}
+// EmailConnectionStatus and EmailScanResponse were removed with the mailbox
+// integration. See the note in src/lib/api.ts.

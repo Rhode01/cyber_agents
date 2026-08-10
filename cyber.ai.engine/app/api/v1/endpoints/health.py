@@ -8,14 +8,23 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from ai_engine import __version__
-from ai_engine.core.config import get_settings
-from ai_engine.llm.factory import describe_model
-from ai_engine.schemas.requests import HealthResponse
+from app import __version__
+from app.core.config import get_settings
+from app.llm.factory import describe_model
+from app.schemas.requests import HealthResponse
 
 router = APIRouter(prefix="/health", tags=["health"])
 
-MOUNTED_AGENTS = ["vulnerability", "phishing", "network", "webapp"]
+
+def _mounted_agents() -> list[str]:
+    """The agent list, read from the router registry rather than duplicated here.
+
+    Imported lazily because app.api.v1.api imports this module, and a top-level
+    import in both directions would be circular.
+    """
+    from app.api.v1.api import MOUNTED_AGENTS
+
+    return list(MOUNTED_AGENTS)
 
 
 @router.get("", response_model=HealthResponse, summary="ai.engine liveness")
@@ -25,6 +34,6 @@ async def health() -> HealthResponse:
     return HealthResponse(
         version=__version__,
         app_env=settings.app_env,
-        agents=MOUNTED_AGENTS,
+        agents=_mounted_agents(),
         llm=describe_model(),
     )

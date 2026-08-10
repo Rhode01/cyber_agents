@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from ai_engine.core.logging import get_logger
+from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -1,13 +1,13 @@
 """The Finding contract, as seen by the ai.engine.
 
 Nothing is redefined here. The shape is imported from the shared
-``cyberagents_contracts`` package - the same package the backend installs into
+``cyber_contracts`` package - the same package the backend installs into
 its own separate virtualenv - so the two services cannot drift apart.
 """
 
 from __future__ import annotations
 
-from cyberagents_contracts import (
+from cyber_contracts import (
     SEVERITY_ORDER,
     AgentKind,
     Finding,

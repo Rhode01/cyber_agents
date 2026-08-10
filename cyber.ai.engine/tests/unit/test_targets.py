@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ai_engine.agents.common.targets import is_local_target
+from app.agents.common.targets import is_local_target
 
 
 class TestIsLocalTarget:

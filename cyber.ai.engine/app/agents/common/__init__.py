@@ -1,8 +1,8 @@
 """Shared building blocks for every agent graph."""
 
-from ai_engine.agents.common.graph import build_linear_graph
-from ai_engine.agents.common.state import AgentState, initial_state
-from ai_engine.agents.common.untrusted import preview, wrap_untrusted
+from app.agents.common.graph import build_linear_graph
+from app.agents.common.state import AgentState, initial_state
+from app.agents.common.untrusted import preview, wrap_untrusted
 
 __all__ = [
     "AgentState",

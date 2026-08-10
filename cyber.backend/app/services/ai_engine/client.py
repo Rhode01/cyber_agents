@@ -13,7 +13,7 @@ from types import TracebackType
 from typing import Any, Self
 
 import httpx
-from cyberagents_contracts import (
+from cyber_contracts import (
     AgentKind,
     DiscoveryReport,
     FindingBatch,

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from cyberagents_contracts import AgentKind, FindingCreate
+from cyber_contracts import AgentKind, FindingCreate
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.finding import FindingRead

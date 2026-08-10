@@ -18,10 +18,10 @@ from sqlalchemy import Table
 from app.models.finding import Finding as FindingModel
 from app.models.run import Run as RunModel
 from app.models.scan import Scan as ScanModel
-from app.models.setting import Setting as SettingModel
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-HEAD_REVISION = "0007"
+# tests/unit/ -> tests/ -> the module root
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+HEAD_REVISION = "0005"
 
 
 def _config() -> Config:
@@ -46,10 +46,14 @@ def test_the_revision_chain_is_linear_and_rooted() -> None:
     scripts = _script_directory()
     revisions = list(scripts.walk_revisions())
 
-    expected = ["0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    # 0004 (settings table) and 0005 (the jsonb->text[] rewrite) were removed in
+    # the restructure: the first stored plaintext secrets, and the second called
+    # jsonb_typeof() on a column 0002 already creates as text[], which fails on
+    # any fresh database. The runs migrations were renumbered to close the gap.
+    expected = ["0005", "0004", "0003", "0002", "0001"]
     assert [r.revision for r in revisions] == expected
     assert revisions[-1].down_revision is None
-    assert revisions[0].down_revision == "0006"
+    assert revisions[0].down_revision == "0004"
 
 
 def test_head_is_reachable() -> None:
@@ -67,7 +71,7 @@ def test_migration_ddl_matches_the_orm_models() -> None:
     """
     sql = _render_sql()
 
-    for model in (FindingModel, RunModel, ScanModel, SettingModel):
+    for model in (FindingModel, RunModel, ScanModel):
         table = model.__table__
         assert isinstance(table, Table)
 

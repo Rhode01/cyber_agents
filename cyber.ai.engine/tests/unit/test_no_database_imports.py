@@ -32,8 +32,9 @@ FORBIDDEN_MODULES = frozenset(
     }
 )
 
-AI_ENGINE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_ROOT = AI_ENGINE_ROOT / "ai_engine"
+# tests/unit/ -> tests/ -> the module root
+AI_ENGINE_ROOT = Path(__file__).resolve().parents[2]
+PACKAGE_ROOT = AI_ENGINE_ROOT / "app"
 
 
 def _imported_root_modules(source: str) -> set[str]:
@@ -75,7 +76,7 @@ def test_no_database_library_is_declared_as_a_dependency() -> None:
 
 
 def test_the_only_route_to_persistence_is_the_backend_client() -> None:
-    client = (PACKAGE_ROOT / "clients" / "backend.py").read_text(encoding="utf-8")
+    client = (PACKAGE_ROOT / "services" / "backend_client.py").read_text(encoding="utf-8")
 
     assert "httpx" in client
     assert _imported_root_modules(client) & FORBIDDEN_MODULES == set()

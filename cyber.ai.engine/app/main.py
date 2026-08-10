@@ -2,7 +2,7 @@
 
 A standalone service: it mounts one router per agent, runs the LangGraph graphs,
 and returns findings. It never opens a database connection - persistence is the
-backend's job, reached over HTTP through ``ai_engine.clients.backend``.
+backend's job, reached over HTTP through ``app.services.backend_client``.
 """
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from ai_engine import __version__
-from ai_engine.core.config import get_settings
-from ai_engine.core.logging import configure_logging, get_logger
-from ai_engine.llm.factory import describe_model
-from ai_engine.routers import discovery, health, network, phishing, vulnerability, webapp
+from app import __version__
+from app.core.config import get_settings
+from app.core.logging import configure_logging, get_logger
+from app.llm.factory import describe_model
+from app.api.v1.api import api_router
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging()
     logger.info(
-        "ai_engine.startup",
+        "app.startup",
         version=__version__,
         app_env=settings.app_env,
         backend_url=settings.backend_url,
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
-    logger.info("ai_engine.shutdown")
+    logger.info("app.shutdown")
 
 
 def create_app() -> FastAPI:
@@ -54,12 +54,7 @@ def create_app() -> FastAPI:
         openapi_url=None if settings.app_env == "production" else "/openapi.json",
     )
 
-    app.include_router(health.router)
-    app.include_router(discovery.router)
-    app.include_router(vulnerability.router)
-    app.include_router(phishing.router)
-    app.include_router(network.router)
-    app.include_router(webapp.router)
+    app.include_router(api_router)
 
     return app
 

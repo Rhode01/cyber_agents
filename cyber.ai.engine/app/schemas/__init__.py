@@ -1,7 +1,7 @@
 """Request and response DTOs for the ai.engine's HTTP surface."""
 
-from ai_engine.schemas.finding import AgentKind, Finding, FindingBatch, FindingCreate, Severity
-from ai_engine.schemas.requests import AnalyzeRequest, AnalyzeResponse, HealthResponse
+from app.schemas.finding import AgentKind, Finding, FindingBatch, FindingCreate, Severity
+from app.schemas.requests import AnalyzeRequest, AnalyzeResponse, HealthResponse
 
 __all__ = [
     "AgentKind",

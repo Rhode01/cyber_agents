@@ -16,8 +16,8 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
-from ai_engine.agents.phishing.nodes import emit_findings, normalize, reason, rule_check, scan
-from ai_engine.agents.phishing.state import PhishingState
+from app.agents.phishing.nodes import emit_findings, normalize, reason, rule_check, scan
+from app.agents.phishing.state import PhishingState
 
 
 def should_reason(state: PhishingState) -> str:

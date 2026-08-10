@@ -11,7 +11,7 @@ One row per uploaded scanner report. It exists for three reasons:
 
 Like the findings table, ``format`` and ``status`` are VARCHAR with CHECK
 constraints rather than native PostgreSQL enums - the StrEnums in
-``cyberagents_contracts`` stay the single validator.
+``cyber_contracts`` stay the single validator.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from cyberagents_contracts import ScanFormat, ScanStatus
+from cyber_contracts import ScanFormat, ScanStatus
 from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String, Text, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column

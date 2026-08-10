@@ -3,7 +3,7 @@
 ZAP and Nuclei output in; OWASP Top 10 findings out.
 """
 
-from ai_engine.agents.webapp.graph import GRAPH, build_graph
-from ai_engine.agents.webapp.state import WebappState
+from app.agents.webapp.graph import GRAPH, build_graph
+from app.agents.webapp.state import WebappState
 
 __all__ = ["GRAPH", "WebappState", "build_graph"]

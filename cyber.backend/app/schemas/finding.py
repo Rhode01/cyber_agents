@@ -1,14 +1,14 @@
 """Finding DTOs.
 
 The wire shape is not redefined here: it is imported from the shared
-``cyberagents_contracts`` package, which is the single source of truth that both
+``cyber_contracts`` package, which is the single source of truth that both
 the backend and the ai.engine install into their own separate virtualenvs. This
 module only adds the read model that maps out of the ORM.
 """
 
 from __future__ import annotations
 
-from cyberagents_contracts import (
+from cyber_contracts import (
     AgentKind,
     Finding,
     FindingBatch,

@@ -1,8 +1,14 @@
 """arq task definitions.
 
-Phase 1 ships one genuinely no-op task (``ping``) so the worker has something to
-prove it is alive, and one thin ``agent_run`` task that shows where long agent
-runs will live. Neither contains detection logic.
+Two real jobs plus a liveness probe:
+
+``analyze_scan``  an uploaded scanner report -> parse -> ai.engine -> findings
+``agent_run``     one agent over one artifact, out of band
+``ping``          no-op, so the worker can be exercised end to end
+
+Both jobs own a session for their whole lifetime and commit as they go, so a
+polling client sees real progress rather than a jump from queued to done. Neither
+contains detection logic - that lives in the ai.engine.
 """
 
 from __future__ import annotations
@@ -13,7 +19,7 @@ from uuid import UUID
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from cyberagents_contracts import (
+from cyber_contracts import (
     AgentKind,
     ScanFormat,
     ScanStatus,
@@ -23,11 +29,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_sessionmaker
-from app.ingestion import ScanParseError, parse
+from app.services.ingestion import ScanParseError, parse
 from app.models.scan import Scan
 from app.schemas.agents import AgentRunRequest
-from app.services.ai_engine_client import AiEngineClient, AiEngineError
-from app.services.orchestration import persist_findings
+from app.services.ai_engine.client import AiEngineClient, AiEngineError
+from app.services.orchestration import persist_findings, run_agent
 
 logger = get_logger(__name__)
 
@@ -39,19 +45,49 @@ async def ping(ctx: dict[str, Any]) -> str:
 
 
 async def agent_run(ctx: dict[str, Any], agent: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Run one agent out of band.
+    """Run one agent over one artifact out of band, and persist what it returns.
 
-    TODO(phase-2): open a session, build an AiEngineClient, and call
-    ``app.services.orchestration.run_agent`` the same way the inline route does.
-    Phase 1 only records that the job was picked up.
+    This is the same call the inline route makes; the only difference is who
+    waits. A self-launched nmap or nuclei scan takes minutes, which is too long
+    to hold an HTTP request open, so the client polls
+    ``GET /findings?run_id=...`` instead.
+
+    Previously this logged "received" and returned ``{"status": "accepted",
+    "findings": []}`` without doing anything, so ``background: true`` was a
+    request that appeared to succeed and silently analysed nothing.
     """
+    job_id = ctx.get("job_id")
+    try:
+        agent_kind = AgentKind(agent)
+        request = AgentRunRequest.model_validate(payload)
+    except ValueError as err:
+        # A malformed job cannot be retried into correctness, so record why and
+        # let it end rather than failing repeatedly.
+        logger.error("worker.agent_run.invalid", job_id=job_id, agent=agent, error=str(err))
+        return {"agent": agent, "status": "invalid", "error": str(err), "findings": 0}
+
     logger.info(
-        "worker.agent_run.received",
-        job_id=ctx.get("job_id"),
-        agent=agent,
-        source=payload.get("source"),
+        "worker.agent_run.start", job_id=job_id, agent=agent, source=request.source,
     )
-    return {"agent": agent, "status": "accepted", "findings": []}
+
+    factory = get_sessionmaker()
+    client = AiEngineClient()
+    try:
+        async with factory() as session:
+            rows = await run_agent(session, client, agent_kind, request)
+    except AiEngineError as err:
+        # Surfaced through the job result rather than swallowed: arq keeps it, and
+        # re-raising would retry a call that already failed after its own retries.
+        detail = str(err)
+        if err.status_code is not None:
+            detail = f"{detail} (upstream status {err.status_code})"
+        logger.warning("worker.agent_run.failed", job_id=job_id, agent=agent, error=detail)
+        return {"agent": agent, "status": "failed", "error": detail, "findings": 0}
+    finally:
+        await client.aclose()
+
+    logger.info("worker.agent_run.done", job_id=job_id, agent=agent, findings=len(rows))
+    return {"agent": agent, "status": "completed", "findings": len(rows)}
 
 
 async def _fail(session: AsyncSession, scan: Scan, reason: str) -> dict[str, Any]:

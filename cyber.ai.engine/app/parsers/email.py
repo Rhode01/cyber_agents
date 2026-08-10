@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Any
 
-from ai_engine.core.logging import get_logger
+from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 

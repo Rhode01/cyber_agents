@@ -1,8 +1,22 @@
 # Cybersecurity Agents Platform - root Makefile.
 #
-# Every target delegates into a module and uses that module's OWN virtualenv.
-# Virtualenvs are never shared: backend/.venv, ai.engine/.venv, mcpserver/.venv,
-# and frontend/node_modules are all independent.
+# Layout follows the luso8 convention: one directory per deployable service,
+# named cyber.<service>, each with its OWN virtualenv and lockfile. Virtualenvs
+# are never shared between services.
+#
+#   cyber.contracts    shared Finding / scan schemas (path dependency, no venv)
+#   cyber.backend      :8000  FastAPI, owns all persistence and migrations
+#   cyber.ai.engine    :8003  LangGraph agents, holds no database
+#   cyber.frontend     :3000  Next.js
+#   cyber.mcp.server   :8004  MCP server
+#
+# Target naming is <module>-<action>; the bare targets fan out to every module.
+
+BACKEND    := cyber.backend
+AI_ENGINE  := cyber.ai.engine
+FRONTEND   := cyber.frontend
+MCP_SERVER := cyber.mcp.server
+CONTRACTS  := cyber.contracts
 
 ifeq ($(OS),Windows_NT)
 PS         := powershell -NoProfile -ExecutionPolicy Bypass
@@ -17,105 +31,98 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help env install install-contracts install-backend install-ai-engine \
-        install-mcpserver install-frontend lock \
-        dev dev-backend dev-ai-engine dev-worker dev-frontend dev-mcpserver \
-        up down down-v build logs ps \
-        migrate migrate-sql revision downgrade \
-        lint lint-contracts lint-backend lint-ai-engine lint-mcpserver lint-frontend \
-        format typecheck typecheck-backend typecheck-ai-engine typecheck-mcpserver typecheck-frontend \
-        test test-backend test-ai-engine test-mcpserver test-frontend \
-        check verify clean
+.PHONY: help env install lock dev up down down-v build logs ps \
+        contracts-check \
+        backend-install backend-dev backend-worker backend-lint backend-typecheck backend-test \
+        ai-engine-install ai-engine-dev ai-engine-lint ai-engine-typecheck ai-engine-test \
+        mcp-server-install mcp-server-dev mcp-server-lint mcp-server-typecheck mcp-server-test \
+        frontend-install frontend-dev frontend-build frontend-lint frontend-typecheck \
+        migrate migrate-sql migrate-create migrate-down migrate-history \
+        lint format typecheck test check verify clean
 
 # ---------------------------------------------------------------- help / env --
 
 help:
-	@echo Cybersecurity Agents Platform - available targets
+	@echo Cybersecurity Agents Platform
 	@echo.
-	@echo   env                Create .env from .env.example if missing
-	@echo   install            Install every module into its own venv
-	@echo   lock               Refresh every lockfile
+	@echo   env                  Create .env from .env.example if missing
+	@echo   install              Install every module into its own venv
+	@echo   lock                 Refresh every lockfile
 	@echo.
-	@echo   dev                Run all five processes locally in parallel
-	@echo   dev-backend        uvicorn backend on port 8000
-	@echo   dev-ai-engine      uvicorn ai.engine on port 8003
-	@echo   dev-worker         arq worker against Redis
-	@echo   dev-frontend       next dev on port 3000
-	@echo   dev-mcpserver      uvicorn mcpserver on port 8004
+	@echo   up / down / down-v   Docker Compose lifecycle
+	@echo   build / logs / ps    Docker Compose build, tail logs, list services
+	@echo   dev                  Run all five processes locally in parallel
 	@echo.
-	@echo   up                 docker compose up -d --build
-	@echo   down               docker compose down
-	@echo   down-v             docker compose down -v [drops the database volume]
-	@echo   build              docker compose build
-	@echo   logs               docker compose logs -f
-	@echo   ps                 docker compose ps
+	@echo   backend-dev          uvicorn backend on port 8000
+	@echo   backend-worker       arq worker against Redis
+	@echo   ai-engine-dev        uvicorn ai.engine on port 8003
+	@echo   frontend-dev         next dev on port 3000
+	@echo   mcp-server-dev       uvicorn mcp.server on port 8004
 	@echo.
-	@echo   migrate            alembic upgrade head [backend only]
-	@echo   migrate-sql        Render migrations as SQL without a database
-	@echo   revision           alembic revision --autogenerate m=your-message
-	@echo   downgrade          alembic downgrade -1
+	@echo   migrate              alembic upgrade head [backend only]
+	@echo   migrate-sql          Render migrations as SQL without a database
+	@echo   migrate-create       alembic revision --autogenerate m=your-message
+	@echo   migrate-down         alembic downgrade -1
+	@echo   migrate-history      alembic history --verbose
 	@echo.
-	@echo   lint               ruff check + next lint, every module
-	@echo   format             ruff format + ruff check --fix, every module
-	@echo   typecheck          mypy + tsc --noEmit, every module
-	@echo   test               pytest + next build, every module
-	@echo   check              lint typecheck test
-	@echo   verify             Probe every health endpoint [needs the stack up]
-	@echo   clean              Remove venvs, caches, node_modules, .next
+	@echo   lint / format / typecheck / test    Fan out to every module
+	@echo   check                lint typecheck test
+	@echo   verify               Probe every health endpoint [needs the stack up]
+	@echo   clean                Remove venvs, caches, node_modules, .next
 
 env:
 	@$(ENSURE_ENV)
 
 # ------------------------------------------------------------------ install --
 
-install: install-contracts install-backend install-ai-engine install-mcpserver install-frontend
+install: contracts-check backend-install ai-engine-install mcp-server-install frontend-install
 	@echo All modules installed into their own virtualenvs.
 
-# The contracts package is consumed as a path dependency by backend and
-# ai.engine, so it has no venv of its own - this target only sanity-checks it.
-install-contracts:
-	cd contracts && poetry check
+# contracts has no venv of its own: it is installed into backend and ai.engine
+# as a path dependency, so this only validates the manifest.
+contracts-check:
+	cd $(CONTRACTS) && poetry check
 
-install-backend:
-	cd backend && poetry install --with dev
+backend-install:
+	cd $(BACKEND) && poetry install --with dev
 
-install-ai-engine:
-	cd ai.engine && poetry install --with dev
+ai-engine-install:
+	cd $(AI_ENGINE) && poetry install --with dev
 
-install-mcpserver:
-	cd mcpserver && poetry install --with dev
+mcp-server-install:
+	cd $(MCP_SERVER) && poetry install --with dev
 
-install-frontend:
-	cd frontend && pnpm install
+frontend-install:
+	cd $(FRONTEND) && pnpm install
 
 lock:
-	cd contracts && poetry lock
-	cd backend && poetry lock
-	cd ai.engine && poetry lock
-	cd mcpserver && poetry lock
-	cd frontend && pnpm install --lockfile-only
+	cd $(CONTRACTS) && poetry lock
+	cd $(BACKEND) && poetry lock
+	cd $(AI_ENGINE) && poetry lock
+	cd $(MCP_SERVER) && poetry lock
+	cd $(FRONTEND) && pnpm install --lockfile-only
 
 # ---------------------------------------------------------------------- dev --
 
 dev:
-	$(MAKE) -j5 dev-backend dev-ai-engine dev-worker dev-frontend dev-mcpserver
+	$(MAKE) -j5 backend-dev ai-engine-dev backend-worker frontend-dev mcp-server-dev
 
-dev-backend:
-	cd backend && poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+backend-dev:
+	cd $(BACKEND) && poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-dev-ai-engine:
-	cd ai.engine && poetry run uvicorn ai_engine.main:app --reload --host 0.0.0.0 --port 8003
+backend-worker:
+	cd $(BACKEND) && poetry run arq app.tasks.worker.WorkerSettings --watch app
 
-dev-worker:
-	cd backend && poetry run arq app.worker.settings.WorkerSettings --watch app
+ai-engine-dev:
+	cd $(AI_ENGINE) && poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8003
 
-dev-frontend:
-	cd frontend && pnpm dev
+frontend-dev:
+	cd $(FRONTEND) && pnpm dev
 
-dev-mcpserver:
-	cd mcpserver && poetry run uvicorn mcpserver.server:app --reload --host 0.0.0.0 --port 8004
+mcp-server-dev:
+	cd $(MCP_SERVER) && poetry run uvicorn app.server:app --reload --host 0.0.0.0 --port 8004
 
-# ------------------------------------------------------------------- compose --
+# ------------------------------------------------------------------ compose --
 
 up: env
 	docker compose up -d --build
@@ -135,79 +142,80 @@ logs:
 ps:
 	docker compose ps
 
-# ------------------------------------------------------------------ migrations --
+# --------------------------------------------------------------- migrations --
 # Alembic lives in the backend only. The backend owns all database logic.
 
 migrate:
-	cd backend && poetry run alembic upgrade head
+	cd $(BACKEND) && poetry run alembic upgrade head
 
 migrate-sql:
-	cd backend && poetry run alembic upgrade head --sql
+	cd $(BACKEND) && poetry run alembic upgrade head --sql
 
-revision:
+migrate-create:
 ifndef m
-	$(error Provide a message: make revision m="add findings index")
+	$(error Provide a message: make migrate-create m="add findings index")
 endif
-	cd backend && poetry run alembic revision --autogenerate -m "$(m)"
+	cd $(BACKEND) && poetry run alembic revision --autogenerate -m "$(m)"
 
-downgrade:
-	cd backend && poetry run alembic downgrade -1
+migrate-down:
+	cd $(BACKEND) && poetry run alembic downgrade -1
+
+migrate-history:
+	cd $(BACKEND) && poetry run alembic history --verbose
 
 # ------------------------------------------------------------------ quality --
 
-lint: lint-contracts lint-backend lint-ai-engine lint-mcpserver lint-frontend
+lint: backend-lint ai-engine-lint mcp-server-lint frontend-lint
 
-# contracts has no venv of its own, so it borrows the backend's ruff binary.
-# Its types are checked transitively: both consumers mypy it through py.typed.
-lint-contracts:
-	cd backend && poetry run ruff check ../contracts
+# contracts borrows the backend's ruff binary: it has no venv of its own, and its
+# types are checked transitively by both consumers through py.typed.
+backend-lint:
+	cd $(BACKEND) && poetry run ruff check ../$(CONTRACTS)
+	cd $(BACKEND) && poetry run ruff check .
 
-lint-backend:
-	cd backend && poetry run ruff check .
+ai-engine-lint:
+	cd $(AI_ENGINE) && poetry run ruff check .
 
-lint-ai-engine:
-	cd ai.engine && poetry run ruff check .
+mcp-server-lint:
+	cd $(MCP_SERVER) && poetry run ruff check .
 
-lint-mcpserver:
-	cd mcpserver && poetry run ruff check .
-
-lint-frontend:
-	cd frontend && pnpm lint
+frontend-lint:
+	cd $(FRONTEND) && pnpm lint
 
 format:
-	cd backend && poetry run ruff format ../contracts && poetry run ruff check --fix ../contracts
-	cd backend && poetry run ruff format . && poetry run ruff check --fix .
-	cd ai.engine && poetry run ruff format . && poetry run ruff check --fix .
-	cd mcpserver && poetry run ruff format . && poetry run ruff check --fix .
-	cd frontend && pnpm format
+	cd $(BACKEND) && poetry run ruff format ../$(CONTRACTS) && poetry run ruff check --fix ../$(CONTRACTS)
+	cd $(BACKEND) && poetry run ruff format . && poetry run ruff check --fix .
+	cd $(AI_ENGINE) && poetry run ruff format . && poetry run ruff check --fix .
+	cd $(MCP_SERVER) && poetry run ruff format . && poetry run ruff check --fix .
+	cd $(FRONTEND) && pnpm format
 
-typecheck: typecheck-backend typecheck-ai-engine typecheck-mcpserver typecheck-frontend
+typecheck: backend-typecheck ai-engine-typecheck mcp-server-typecheck frontend-typecheck
 
-typecheck-backend:
-	cd backend && poetry run mypy
+backend-typecheck:
+	cd $(BACKEND) && poetry run mypy
 
-typecheck-ai-engine:
-	cd ai.engine && poetry run mypy
+ai-engine-typecheck:
+	cd $(AI_ENGINE) && poetry run mypy
 
-typecheck-mcpserver:
-	cd mcpserver && poetry run mypy
+mcp-server-typecheck:
+	cd $(MCP_SERVER) && poetry run mypy
 
-typecheck-frontend:
-	cd frontend && pnpm typecheck
+frontend-typecheck:
+	cd $(FRONTEND) && pnpm typecheck
 
-test: test-backend test-ai-engine test-mcpserver test-frontend
+test: backend-test ai-engine-test mcp-server-test frontend-build
 
-test-backend:
-	cd backend && poetry run pytest -q
+backend-test:
+	cd $(BACKEND) && poetry run pytest -q
 
-test-ai-engine:
-	cd ai.engine && poetry run pytest -q
+ai-engine-test:
+	cd $(AI_ENGINE) && poetry run pytest -q
 
-test-mcpserver:
-	cd mcpserver && poetry run pytest -q
+mcp-server-test:
+	cd $(MCP_SERVER) && poetry run pytest -q
 
-test-frontend:
-	cd frontend && pnpm build
+frontend-build:
+	cd $(FRONTEND) && pnpm build
 
 check: lint typecheck test
 

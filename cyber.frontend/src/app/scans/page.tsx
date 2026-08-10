@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { fetchFindings } from '@/lib/api'
-import type { Finding, AgentKind, Severity } from '@/lib/types'
+import { SeverityBadge, SeverityDot } from '@/components/SeverityBadge'
+import { SEVERITY_ORDER } from '@/lib/severity'
+import type { Finding, AgentKind, Severity } from '@/types'
 
 interface ScanSession {
   id: string
@@ -19,13 +21,6 @@ interface ScanSession {
   status: 'clean' | 'warning' | 'critical'
 }
 
-const SEVERITY_COLORS: Record<Severity, string> = {
-  critical: '#ef4444',
-  high: '#f97316',
-  medium: '#eab308',
-  low: '#38bdf8',
-  info: '#d946ef',
-}
 
 const AGENT_LABELS: Record<AgentKind, string> = {
   vulnerability: 'Vulnerability',
@@ -99,29 +94,11 @@ function groupIntoSessions(findings: Finding[]): ScanSession[] {
 }
 
 function SeverityPips({ severities }: { severities: Record<Severity, number> }) {
-  const keys: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-      {keys.map((sev) =>
+    <div className="flex flex-wrap gap-2">
+      {SEVERITY_ORDER.map((sev) =>
         severities[sev] > 0 ? (
-          <span
-            key={sev}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              padding: '2px 8px',
-              borderRadius: '4px',
-              background: `${SEVERITY_COLORS[sev]}22`,
-              color: SEVERITY_COLORS[sev],
-              border: `1px solid ${SEVERITY_COLORS[sev]}44`,
-              textTransform: 'capitalize',
-            }}
-          >
-            {severities[sev]} {sev}
-          </span>
+          <SeverityBadge key={sev} severity={sev} count={severities[sev]} size="sm" />
         ) : null,
       )}
     </div>
@@ -401,15 +378,7 @@ export default function ScansPage() {
                           transition: 'border-color 0.2s',
                         }}
                       >
-                        <span
-                          style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            background: SEVERITY_COLORS[f.severity],
-                            flexShrink: 0,
-                          }}
-                        />
+                        <SeverityDot severity={f.severity} />
                         <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {f.title}
                         </span>

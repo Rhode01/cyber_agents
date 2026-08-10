@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ai_engine.agents.common.graph import build_linear_graph
-from ai_engine.agents.network.nodes import detect, emit_findings, normalize, reason, scan
-from ai_engine.agents.network.state import NetworkState
+from app.agents.common.graph import build_linear_graph
+from app.agents.network.nodes import detect, emit_findings, normalize, reason, scan
+from app.agents.network.state import NetworkState
 
 
 def build_graph() -> Any:

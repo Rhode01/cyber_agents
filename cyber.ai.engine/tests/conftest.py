@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from ai_engine.main import app
+from app.main import app
 
 AGENTS = ("vulnerability", "phishing", "network", "webapp")
 

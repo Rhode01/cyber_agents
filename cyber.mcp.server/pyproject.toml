@@ -1,5 +1,5 @@
 [project]
-name = "mcpserver"
+name = "cyber-mcp-server"
 version = "0.1.0"
 description = "MCP server exposing platform capabilities to MCP hosts. Stub in Phase 1."
 requires-python = ">=3.12,<4.0"
@@ -39,7 +39,7 @@ ignore = ["S104"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["mcpserver", "tests"]
+files = ["app", "tests"]
 strict = true
 warn_unused_ignores = true
 show_error_codes = true
@@ -53,7 +53,7 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 # Tool bodies stay fully annotated; only the @mcp.tool() decorator is opaque
 # here, which is a consequence of the skip above rather than our code.
-module = ["mcpserver.server"]
+module = ["app.server"]
 disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]

@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from cyberagents_contracts import AgentKind, FindingCreate, FindingType, Severity
+from cyber_contracts import AgentKind, FindingCreate, FindingType, Severity
 
-from ai_engine.agents.common.untrusted import preview
+from app.agents.common.untrusted import preview
 
 
 def placeholder_finding(

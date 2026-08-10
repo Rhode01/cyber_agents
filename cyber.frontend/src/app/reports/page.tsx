@@ -2,17 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { fetchFindings } from '@/lib/api'
-import type { Finding, Severity } from '@/lib/types'
-
-const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
-
-const SEVERITY_META: Record<Severity, { label: string; color: string }> = {
-  critical: { label: 'Critical', color: '#f43f5e' },
-  high: { label: 'High', color: '#fb923c' },
-  medium: { label: 'Medium', color: '#fbbf24' },
-  low: { label: 'Low', color: '#38bdf8' },
-  info: { label: 'Info', color: '#64748b' },
-}
+import { SeverityDot } from '@/components/SeverityBadge'
+import {
+  SEVERITY_CLASS,
+  SEVERITY_LABEL,
+  SEVERITY_ORDER,
+  emptySeverityCounts,
+} from '@/lib/severity'
+import { cn } from '@/lib/utils'
+import type { Finding } from '@/types'
 
 export default function ReportsPage() {
   const [data, setData] = useState<{ items: Finding[] } | null>(null)
@@ -28,7 +26,7 @@ export default function ReportsPage() {
 
   const metrics = useMemo(() => {
     const items = data?.items ?? []
-    const bySeverity: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+    const bySeverity = emptySeverityCounts()
     const byAgent: Record<string, number> = {}
     const byAsset: Record<string, number> = {}
 
@@ -38,7 +36,7 @@ export default function ReportsPage() {
       if (f.asset) byAsset[f.asset] = (byAsset[f.asset] ?? 0) + 1
     }
 
-    const maxSeverity = Math.max(1, ...SEVERITIES.map((s) => bySeverity[s]))
+    const maxSeverity = Math.max(1, ...SEVERITY_ORDER.map((s) => bySeverity[s]))
     const topAssets = Object.entries(byAsset).sort((a, b) => b[1] - a[1]).slice(0, 5)
     const riskScore = items.length
       ? Math.round(
@@ -107,22 +105,19 @@ export default function ReportsPage() {
           <section className="panel">
             <h2>Severity distribution</h2>
             <div className="dist-bar">
-              {SEVERITIES.map((sev) => (
+              {SEVERITY_ORDER.map((sev) => (
                 <div
                   key={sev}
-                  className="dist-seg"
-                  style={{
-                    width: `${(metrics.bySeverity[sev] / metrics.maxSeverity) * 100}%`,
-                    background: SEVERITY_META[sev].color,
-                  }}
+                  className={cn('dist-seg', SEVERITY_CLASS[sev].fill)}
+                  style={{ width: `${(metrics.bySeverity[sev] / metrics.maxSeverity) * 100}%` }}
                 />
               ))}
             </div>
             <div className="dist-legend">
-              {SEVERITIES.map((sev) => (
+              {SEVERITY_ORDER.map((sev) => (
                 <div key={sev} className="item">
-                  <span className="swatch" style={{ background: SEVERITY_META[sev].color }} />
-                  {SEVERITY_META[sev].label}
+                  <SeverityDot severity={sev} className="size-2.5" />
+                  {SEVERITY_LABEL[sev]}
                   <strong style={{ color: 'var(--text)' }}>{metrics.bySeverity[sev]}</strong>
                 </div>
               ))}

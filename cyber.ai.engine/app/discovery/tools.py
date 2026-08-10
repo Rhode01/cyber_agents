@@ -20,12 +20,12 @@ import asyncio
 import ipaddress
 import time
 
-from cyberagents_contracts import InterfaceInfo, ServicePort, WebHost
+from cyber_contracts import InterfaceInfo, ServicePort, WebHost
 
-from ai_engine.agents.common.scanning import run_command
-from ai_engine.core.logging import get_logger
-from ai_engine.parsers import ParseError
-from ai_engine.parsers.nmap import parse as parse_nmap_xml
+from app.agents.common.scanning import run_command
+from app.core.logging import get_logger
+from app.parsers import ParseError
+from app.parsers.nmap import parse as parse_nmap_xml
 
 logger = get_logger(__name__)
 

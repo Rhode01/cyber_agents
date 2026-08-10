@@ -1,5 +1,5 @@
-# Root build context is used by backend/ and ai.engine/ so they can consume the
-# contracts/ path dependency. Keep the context small.
+# The repo root is the build context for cyber.backend and cyber.ai.engine so
+# they can consume the cyber.contracts path dependency. Keep the context small.
 **/.venv/
 **/__pycache__/
 **/*.py[cod]
@@ -14,8 +14,13 @@
 .env
 .env.*
 !.env.example
-frontend/
+
+# Not needed by either Python image.
+cyber.frontend/
+cyber.mcp.server/
+infrastructure/
+scripts/
 README.md
 Makefile
 docker-compose.yml
-scripts/
+VERSION

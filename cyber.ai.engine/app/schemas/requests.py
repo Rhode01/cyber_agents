@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from cyberagents_contracts import FindingBatch
+from cyber_contracts import FindingBatch
 from pydantic import BaseModel, ConfigDict, Field
 
 AnalyzeResponse = FindingBatch

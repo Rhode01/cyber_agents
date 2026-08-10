@@ -1,3 +1,9 @@
+/* Tailwind v4. The single @import replaces v3's three @tailwind directives, and
+   it comes first on purpose so the hand-written component styles further down
+   keep winning on equal specificity.
+   Requires: tailwindcss + @tailwindcss/postcss (no autoprefixer in v4). */
+@import "tailwindcss";
+
 :root {
   /* Pentesterra Dark Palette */
   --bg: #161618;
@@ -36,8 +42,51 @@
   --brand: var(--accent);
   --fg: var(--text);
 
+
   --radius: 6px;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+/* Tailwind v4 theme tokens.
+ *
+ * `inline` makes each utility compile to the *value* of the referenced custom
+ * property rather than a chain of var() lookups - without it, a utility used
+ * inside a subtree that redefines the property would silently fall back.
+ *
+ * The palette above stays the single source of colour truth: this block only
+ * exposes it to Tailwind, so `bg-severity-critical` and `--critical` can never
+ * drift apart. v4 needs no tailwind.config.ts for this.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-ok: var(--ok);
+  --color-bad: var(--bad);
+
+  --color-severity-critical: var(--critical);
+  --color-severity-high: var(--high);
+  --color-severity-medium: var(--medium);
+  --color-severity-low: var(--low);
+  --color-severity-info: var(--info);
+
+  --color-severity-critical-bg: var(--critical-bg);
+  --color-severity-high-bg: var(--high-bg);
+  --color-severity-medium-bg: var(--medium-bg);
+  --color-severity-low-bg: var(--low-bg);
+  --color-severity-info-bg: var(--info-bg);
+
+  --font-mono: var(--font-mono);
+  --radius: var(--radius);
 }
 
 * {
@@ -412,64 +461,16 @@ code {
 
 /* ---------- severity badges ---------- */
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 0.3rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  font-family: var(--font-outfit);
-}
-
-.badge::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
-}
-
-.sev-critical {
-  color: var(--critical);
-  background: var(--critical-bg);
-  border-color: rgba(255, 0, 85, 0.3);
-  box-shadow: 0 0 15px rgba(255, 0, 85, 0.1);
-}
-
-.sev-high {
-  color: var(--high);
-  background: var(--high-bg);
-  border-color: rgba(255, 136, 0, 0.3);
-  box-shadow: 0 0 15px rgba(255, 136, 0, 0.1);
-}
-
-.sev-medium {
-  color: var(--medium);
-  background: var(--medium-bg);
-  border-color: rgba(250, 204, 21, 0.3);
-  box-shadow: 0 0 15px rgba(250, 204, 21, 0.1);
-}
-
-.sev-low {
-  color: var(--low);
-  background: var(--low-bg);
-  border-color: rgba(0, 210, 255, 0.3);
-  box-shadow: 0 0 15px rgba(0, 210, 255, 0.1);
-}
-
-.sev-info {
-  color: var(--info);
-  background: var(--info-bg);
-  border-color: rgba(129, 140, 248, 0.3);
-  box-shadow: 0 0 15px rgba(129, 140, 248, 0.1);
-}
+/* .badge, .badge::before and .sev-critical … .sev-info were removed here.
+ *
+ * They were the third of three conflicting colour systems for the same five
+ * severities: these border and glow values (#ff0055, #ff8800, #00d2ff, #818cf8)
+ * never matched the palette above, and `info` was indigo here, magenta in the
+ * palette and grey in the page-level maps.
+ *
+ * Severity presentation now lives in one place: src/lib/severity.ts maps a
+ * severity onto the `@theme inline` tokens, and src/components/SeverityBadge.tsx
+ * is the only thing that renders it. */
 
 .status.ok,
 .status.bad,

@@ -16,18 +16,18 @@ import hashlib
 from typing import Annotated
 from uuid import UUID
 
-from cyberagents_contracts import ScanFormat, ScanStatus
+from cyber_contracts import ScanFormat, ScanStatus
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 
 from app.api.deps import SessionDep, SettingsDep
 from app.core.logging import get_logger
 from app.core.security import CurrentPrincipal
-from app.ingestion import ScanParseError, detect_format
-from app.ingestion.registry import PARSERS
+from app.services.ingestion import ScanParseError, detect_format
+from app.services.ingestion.registry import PARSERS
 from app.models.scan import MAX_RAW_CONTENT_BYTES, Scan
 from app.schemas.scan import ScanList, ScanRead
-from app.worker.tasks import enqueue_scan_analysis
+from app.tasks.scan_tasks import enqueue_scan_analysis
 
 logger = get_logger(__name__)
 

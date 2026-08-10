@@ -1,7 +1,7 @@
 """Link findings to the pipeline run that produced them.
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0005
+Revises: 0004
 Create date: 2026-08-06
 
 Adds the nullable ``runs.id`` foreign key to ``findings`` so the scans page can
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0007"
-down_revision: str | None = "0006"
+revision: str = "0005"
+down_revision: str | None = "0004"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

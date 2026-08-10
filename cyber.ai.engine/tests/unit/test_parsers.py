@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from ai_engine.parsers import ParseError, nmap, nuclei, suricata, trivy, zap, zeek
-from ai_engine.parsers import email as email_parser
+from app.parsers import ParseError, nmap, nuclei, suricata, trivy, zap, zeek
+from app.parsers import email as email_parser
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
 # ---------------------------------------------------------------------------

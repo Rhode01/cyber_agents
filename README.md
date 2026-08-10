@@ -15,7 +15,7 @@ Four detection agents share one pipeline:
 
 **Everything an agent ingests is untrusted data, never instructions.** Email
 bodies, HTTP responses, and log fields are attacker-controllable. The boundary is
-enforced in one place: `ai.engine/ai_engine/agents/common/untrusted.py`. Nothing
+enforced in one place: `cyber.ai.engine/app/agents/common/untrusted.py`. Nothing
 reaches a prompt without passing through it.
 
 The MVP pipeline is live end to end: the frontend launches a run, the backend
@@ -47,11 +47,42 @@ modules are tied together only by the root `Makefile` and `docker-compose.yml`.
 
 | Module | Port | Stack | Package manager |
 | --- | --- | --- | --- |
-| `backend/` | **8000** | FastAPI, SQLAlchemy 2.0 async, asyncpg, Alembic, arq | Poetry (`backend/.venv`) |
-| `ai.engine/` | **8003** | FastAPI, LangChain, LangGraph, `langchain-openai` / `langchain-anthropic` | Poetry (`ai.engine/.venv`) |
-| `frontend/` | **3000** | Next.js App Router, React, TypeScript | pnpm (`frontend/node_modules`) |
-| `mcpserver/` | **8004** | MCP Python SDK over Streamable HTTP | Poetry (`mcpserver/.venv`) |
-| `contracts/` | – | Shared `Finding` and `DiscoveryReport` schemas, pydantic only | consumed as a path dependency |
+| `cyber.backend/` | **8000** | FastAPI, SQLAlchemy 2.0 async, asyncpg, Alembic, arq | Poetry (`cyber.backend/.venv`) |
+| `cyber.ai.engine/` | **8003** | FastAPI, LangChain, LangGraph, `langchain-openai` / `langchain-anthropic` | Poetry (`cyber.ai.engine/.venv`) |
+| `cyber.frontend/` | **3000** | Next.js App Router, React, TypeScript, Tailwind | pnpm (`cyber.frontend/node_modules`) |
+| `cyber.mcp.server/` | **8004** | MCP Python SDK over Streamable HTTP | Poetry (`cyber.mcp.server/.venv`) |
+| `cyber.contracts/` | – | Shared `Finding` and `DiscoveryReport` schemas, pydantic only | consumed as a path dependency |
+
+### Layout
+
+One directory per deployable service, named `cyber.<service>`. Every Python
+service uses `app` as its package name and the same internal shape, so moving
+between them costs nothing:
+
+```
+cyber.<service>/
+├── pyproject.toml  poetry.toml  poetry.lock  Dockerfile
+└── app/
+    ├── main.py                 FastAPI app factory      (server.py in mcp.server)
+    ├── api/
+    │   ├── deps.py             shared route dependencies
+    │   └── v1/
+    │       ├── api.py          the aggregate router
+    │       └── endpoints/      one module per resource
+    ├── core/                   config, logging, security
+    ├── schemas/                pydantic DTOs
+    ├── services/               outbound clients and domain logic
+    └── tasks/                  background work (arq)
+```
+
+The backend adds `crud/` (one `crud_<model>.py` per model over a shared
+`CRUDBase`), `db/`, `models/` and `alembic/`. The ai.engine adds `agents/<name>/`
+(`graph`, `nodes`, `state`, `prompt`, `tools`), `parsers/`, `discovery/` and
+`llm/`. The frontend follows the same idea under `src/`: `app/`, `components/`,
+`lib/`, `types/`. Tests live in `tests/unit/` with shared fixtures in
+`tests/conftest.py`.
+
+Deployment config lives in `infrastructure/`, away from application code.
 
 Shared infrastructure runs as containers: PostgreSQL and Redis. Background and
 scheduled jobs run through **arq** inside the backend. The ai.engine image ships
@@ -73,21 +104,21 @@ scheduled jobs run through **arq** inside the backend. The ai.engine image ships
 
 **The ai.engine never touches the database.** When it needs platform state it
 calls the backend over HTTP. This is enforced by a test, not by convention:
-`ai.engine/tests/test_no_database_imports.py` parses every module under
-`ai_engine/` and fails on any database import, and checks the declared
+`cyber.ai.engine/tests/unit/test_no_database_imports.py` parses every module under
+`app/` and fails on any database import, and checks the declared
 dependencies too.
 
 ### The shared contracts
 
-Both services exchange shapes defined once in `contracts/` and installed into
+Both services exchange shapes defined once in `cyber.contracts/` and installed into
 each module's **own** virtualenv as a Poetry path dependency
 (`develop = true`). One definition, two virtualenvs, no drift. The backend's
-`tests/test_finding_contract.py` is the guard that the database table keeps up
-with `Finding`; `ai.engine/tests/test_discovery.py` guards `DiscoveryReport` and
+`tests/unit/test_finding_contract.py` is the guard that the database table keeps up
+with `Finding`; `cyber.ai.engine/tests/unit/test_discovery.py` guards `DiscoveryReport` and
 its `ServicePort` rows.
 
 Because of the path dependency, the backend and ai.engine Docker builds use the
-**repository root** as their build context (`dockerfile: backend/Dockerfile`).
+**repository root** as their build context (`dockerfile: cyber.backend/Dockerfile`).
 
 ---
 
@@ -209,7 +240,7 @@ Then:
 - <http://localhost:8004/health> – mcpserver liveness (its MCP endpoint is `/mcp`)
 
 Running without Docker? `make install`, point `DATABASE_URL` and `REDIS_URL` at
-your own PostgreSQL and Redis, then `make dev` (or the individual `make dev-*`
+your own PostgreSQL and Redis, then `make dev` (or the individual `make *-dev`
 targets, one per terminal).
 
 ---
@@ -278,13 +309,13 @@ contains a database library.
   never open a socket.
 - Alembic is async (`alembic/env.py`) and takes its URL from
   `app.core.config`, so the database location is defined in exactly one place.
-- Migrations (`backend/alembic/versions/`): `0001` baseline findings, `0002`
+- Migrations (`cyber.backend/alembic/versions/`): `0001` baseline findings, `0002`
   scan intake + finding detail (evidence, asset, agent trace), `0003` finding
   indexes, `0004` settings table, `0005` CVE IDs as a text array, `0006` runs
   table, `0007` findings → run association.
 
 `agent` and `severity` are `VARCHAR` with `CHECK` constraints rather than native
-PostgreSQL enums: the Python `StrEnum` in `contracts/` stays the single
+PostgreSQL enums: the Python `StrEnum` in `cyber.contracts/` stays the single
 validator, and adding a severity level later is a constraint swap instead of an
 `ALTER TYPE`.
 
@@ -294,7 +325,7 @@ validator, and adding a severity level later is a constraint swap instead of an
 
 Discovery is deliberately scoped: it scans **only the addresses of the device
 it runs on** (each interface's own IP plus `127.0.0.1`), never the surrounding
-subnet. `ai.engine/ai_engine/discovery/tools.py`:
+subnet. `cyber.ai.engine/app/discovery/tools.py`:
 
 1. `list_interfaces()` – parses `ip -o -4 addr show`, discards loopback ranges,
    host-routed /32s, and oversized subnets.
@@ -311,7 +342,7 @@ matched by host and port.
 ## Adding an agent
 
 Each agent is a self-contained LangGraph package under
-`ai.engine/ai_engine/agents/`, always the same five modules:
+`cyber.ai.engine/app/agents/`, always the same five modules:
 
 ```
 state.py    the graph's state schema
@@ -337,15 +368,15 @@ a few tests exist specifically to stop the architecture eroding:
 
 | Test | Guards |
 | --- | --- |
-| `ai.engine/tests/test_no_database_imports.py` | ai.engine stays free of database code, in source *and* in declared dependencies |
-| `ai.engine/tests/test_agent_routers.py` | Every agent response validates against the shared `FindingBatch` with `extra="forbid"` |
-| `ai.engine/tests/test_graphs.py` | All four graphs compile and run; untrusted input reaches the prompt only fenced |
-| `ai.engine/tests/test_discovery.py` | Interface filtering, service parsing, and graceful degradation when `nmap` is missing |
-| `ai.engine/tests/test_llm_factory.py` | Provider selection, lazy construction, and the no-key fallback |
-| `backend/tests/test_finding_contract.py` | The `findings` columns still match the shared contract exactly |
-| `backend/tests/test_migrations.py` | The migrations' DDL matches the ORM models, rendered offline with no database |
-| `backend/tests/test_runs.py` / `test_discovery.py` | Run lifecycle and discovery proxy endpoints |
-| `mcpserver/tests/test_server.py` | A real MCP `initialize` handshake succeeds over Streamable HTTP |
+| `cyber.ai.engine/tests/unit/test_no_database_imports.py` | ai.engine stays free of database code, in source *and* in declared dependencies |
+| `cyber.ai.engine/tests/unit/test_agent_routers.py` | Every agent response validates against the shared `FindingBatch` with `extra="forbid"` |
+| `cyber.ai.engine/tests/unit/test_graphs.py` | All four graphs compile and run; untrusted input reaches the prompt only fenced |
+| `cyber.ai.engine/tests/unit/test_discovery.py` | Interface filtering, service parsing, and graceful degradation when `nmap` is missing |
+| `cyber.ai.engine/tests/unit/test_llm_factory.py` | Provider selection, lazy construction, and the no-key fallback |
+| `cyber.backend/tests/unit/test_finding_contract.py` | The `findings` columns still match the shared contract exactly |
+| `cyber.backend/tests/unit/test_migrations.py` | The migrations' DDL matches the ORM models, rendered offline with no database |
+| `cyber.backend/tests/unit/test_runs.py` / `test_discovery.py` | Run lifecycle and discovery proxy endpoints |
+| `cyber.mcp.server/tests/unit/test_server.py` | A real MCP `initialize` handshake succeeds over Streamable HTTP |
 
 Two things cannot be checked without infrastructure: `GET /health/db` and the
 findings routes need PostgreSQL, and the arq worker needs Redis. `make up`
