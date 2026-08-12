@@ -1,0 +1,57 @@
+{
+  "format": "email_mime",
+  "message_id": "<notify-8814aa3c@github.com>",
+  "subject": "[cyber-agents] Pull request #42 was merged",
+  "date": "Mon, 10 Aug 2026 09:14:20 +0000",
+  "sender": {
+    "display_name": "GitHub",
+    "address": "noreply@github.com",
+    "domain": "github.com"
+  },
+  "reply_to": null,
+  "return_path": null,
+  "to": [
+    {
+      "display_name": "",
+      "address": "analyst@corp.example",
+      "domain": "corp.example"
+    }
+  ],
+  "auth": {
+    "spf": "pass",
+    "dkim": "pass",
+    "dmarc": "pass",
+    "present": true
+  },
+  "received_chain": [
+    "from mail.github.com (mail.github.com [192.30.252.200])\tby mx.corp.example (Postfix) with ESMTPS id 4A2F1C0A3B\tfor <analyst@corp.example>; Mon, 10 Aug 2026 09:14:22 +0000 (UTC)"
+  ],
+  "headers_present": [
+    "authentication-results",
+    "content-type",
+    "date",
+    "from",
+    "message-id",
+    "mime-version",
+    "received",
+    "subject",
+    "to"
+  ],
+  "body_text": "Your pull request #42 \"Add the phishing indicator engine\" was merged into main.\n\nView it at https://github.com/example/cyber-agents/pull/42\n\nYou are receiving this because you authored the thread.\n",
+  "body_html_present": true,
+  "links": [
+    {
+      "url": "https://github.com/example/cyber-agents/pull/42",
+      "scheme": "https",
+      "host": "github.com",
+      "anchor_text": "View pull request"
+    },
+    {
+      "url": "https://github.com/settings/notifications",
+      "scheme": "https",
+      "host": "github.com",
+      "anchor_text": "Manage notifications"
+    }
+  ],
+  "attachments": []
+}

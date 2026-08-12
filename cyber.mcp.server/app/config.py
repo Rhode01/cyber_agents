@@ -59,9 +59,36 @@ class Settings(BaseSettings):
         ]
     )
     scan_timeout_seconds: float = Field(default=120.0, gt=0)
+    scan_nmap_path: str = Field(
+        default="nmap",
+        description=(
+            "The nmap executable. A bare name is resolved through PATH, which is the "
+            "right default inside the container image. Set an absolute path where nmap "
+            "is installed but not on PATH - notably the Windows installer, which puts it "
+            "in 'C:\\Program Files (x86)\\Nmap' and adds nothing to the machine PATH. "
+            "Without this the tool reports 'nmap is not installed' while the binary is "
+            "plainly there, and the service has to be relaunched with a doctored "
+            "environment to work at all."
+        ),
+    )
     cve_lookup_url: str = "https://cve.circl.lu/api/cve"
     cve_lookup_timeout_seconds: float = Field(default=8.0, gt=0)
     cve_cache_ttl_seconds: float = Field(default=3600.0, ge=0)
+
+    # Phishing link inspection. `fetch_url` is the only tool that contacts a host an
+    # attacker chose, so it needs two switches to agree: this one, and the per-request
+    # opt-in the analyst sets. That means an operator can disable all egress regardless of
+    # what any request asks for, which a per-request flag alone could not provide.
+    #
+    # Default off. Fetching tells whoever runs the phishing site that the message is being
+    # investigated, and that should be a decision rather than a side effect.
+    phishing_fetch_enabled: bool = Field(
+        default=False,
+        description=(
+            "Allow fetch_url to retrieve linked pages. Both this and the per-request "
+            "opt-in must be true before any request leaves the host."
+        ),
+    )
 
     @field_validator("backend_url", "cve_lookup_url")
     @classmethod

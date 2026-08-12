@@ -8,7 +8,7 @@ Four detection agents share one pipeline:
 
 | Agent | Ingests | Produces |
 | --- | --- | --- |
-| Vulnerability assessment | Nmap, OpenVAS, Trivy | CVE correlation, remediation priority |
+| Vulnerability assessment | Nmap, OpenVAS, Trivy | Outdated services, risky exposures, CVE correlation, explainable remediation priority |
 | Phishing detection | Emails, URLs, domains | SPF/DKIM/DMARC alignment, reputation, verdict |
 | Network traffic analysis | NetFlow, Zeek, Suricata | Anomalies, DDoS and DNS floods, beaconing |
 | Web application | ZAP, Nuclei | OWASP Top 10 findings |
@@ -18,10 +18,14 @@ bodies, HTTP responses, and log fields are attacker-controllable. The boundary i
 enforced in one place: `cyber.ai.engine/app/agents/common/untrusted.py`. Nothing
 reaches a prompt without passing through it.
 
-The MVP pipeline is live end to end: the frontend launches a run, the backend
-persists it, ai.engine discovers the device's own interfaces and probes them,
-the four agent graphs reason over the results (live LLM with a graceful
-no-key fallback), and findings land back on the dashboard.
+The pipeline is live end to end: the frontend launches a run, the backend persists
+it, ai.engine discovers the device's own interfaces and probes them, the four agent
+graphs reason over the results, and findings land back on the dashboard.
+
+**Detection is deterministic; the model narrates.** The vulnerability agent derives
+every finding from a curated knowledge base and version comparisons before any
+prompt is built, so it produces real findings with no API key configured and the
+LLM cannot invent one. See [the vulnerability agent's shape](#the-vulnerability-agents-shape).
 
 ---
 
@@ -38,19 +42,28 @@ modules are tied together only by the root `Makefile` and `docker-compose.yml`.
                                   │  owns ALL    │◄──── frontend :3000
                                   │  persistence │
                                   └──┬────────┬──┘
-                                     │        │
+                                     │        │ X-Internal-Key
                        PostgreSQL ◄──┘        └──► ai.engine :8003
                        Redis (arq)                 LangGraph agents
-                                                  + nmap, nuclei on the host
-                                  mcpserver :8004  (stub)
+                            ▲                            │
+                            │ X-Internal-Key             │ X-Internal-Key
+                            └──────── mcpserver :8004 ◄───┘
+                                      executes the tools:
+                                      nmap, CVE lookup, exposure
 ```
+
+**Reasoning is separated from tool execution.** The ai.engine decides what to look
+at; the MCP server runs the scanners. One place executes a scan, holds one target
+allowlist, and provides one audit point - and the same tools are then available to
+any external MCP host. All three service-to-service hops carry a shared
+`INTERNAL_KEY`; browser-facing routes do not (see [Security](#security)).
 
 | Module | Port | Stack | Package manager |
 | --- | --- | --- | --- |
 | `cyber.backend/` | **8000** | FastAPI, SQLAlchemy 2.0 async, asyncpg, Alembic, arq | Poetry (`cyber.backend/.venv`) |
 | `cyber.ai.engine/` | **8003** | FastAPI, LangChain, LangGraph, `langchain-openai` / `langchain-anthropic` | Poetry (`cyber.ai.engine/.venv`) |
 | `cyber.frontend/` | **3000** | Next.js App Router, React, TypeScript, Tailwind | pnpm (`cyber.frontend/node_modules`) |
-| `cyber.mcp.server/` | **8004** | MCP Python SDK over Streamable HTTP | Poetry (`cyber.mcp.server/.venv`) |
+| `cyber.mcp.server/` | **8004** | MCP Python SDK over Streamable HTTP, `nmap` | Poetry (`cyber.mcp.server/.venv`) |
 | `cyber.contracts/` | – | Shared `Finding` and `DiscoveryReport` schemas, pydantic only | consumed as a path dependency |
 
 ### Layout
@@ -97,9 +110,16 @@ scheduled jobs run through **arq** inside the backend. The ai.engine image ships
    it never sweeps the subnet. A light `nmap -Pn -sV` pass reports
    services, products, and versions for the Services Active page.
 3. The backend calls an **ai.engine** agent endpoint (`:8003`) - inline, or via
-   an arq job when the run is long.
-4. The ai.engine runs that agent's LangGraph graph and returns `Finding` objects.
-5. The backend persists them, associates them with the run, and serves the
+   an arq job when the run is long. Two shapes exist for vulnerability work:
+   `POST /agents/vulnerability/analyze` takes a raw artifact or just a target,
+   and `POST /agents/vulnerability/assess` takes a scan the backend already
+   parsed. Uploaded scans take the second, because parsing lives in the backend.
+4. The ai.engine runs that agent's LangGraph graph. When it needs a scanner or a
+   lookup it calls the **mcpserver** (`:8004`), which executes the tool and
+   returns the raw output. Tool results are evidence; they never become findings
+   on their own.
+5. The agent returns `Finding` objects.
+6. The backend persists them, associates them with the run, and serves the
    **frontend** (`:3000`).
 
 **The ai.engine never touches the database.** When it needs platform state it
@@ -253,12 +273,12 @@ targets, one per terminal).
 | `install` | Install all five modules, each into its own venv |
 | `lock` | Refresh every lockfile |
 | `dev` | Run all five processes in parallel |
-| `dev-backend` / `dev-ai-engine` / `dev-worker` / `dev-frontend` / `dev-mcpserver` | One process each |
+| `backend-dev` / `ai-engine-dev` / `backend-worker` / `frontend-dev` / `mcp-server-dev` | One process each |
 | `up` / `down` / `down-v` / `build` / `logs` / `ps` | Docker Compose |
 | `migrate` | `alembic upgrade head` (backend) |
 | `migrate-sql` | Render migrations as SQL with no database |
-| `revision m="..."` | `alembic revision --autogenerate` |
-| `downgrade` | Roll back one revision |
+| `migrate-create m="..."` | `alembic revision --autogenerate` (pass `--rev-id NNNN`) |
+| `migrate-down` / `migrate-history` | Roll back one revision / show the chain |
 | `lint` / `format` / `typecheck` / `test` | Fan out to every module |
 | `check` | `lint typecheck test` |
 | `verify` | Probe every health endpoint (stack must be up) |
@@ -295,8 +315,40 @@ protection and answers `421 Misdirected Request`. `MCP_ALLOWED_HOSTS` and
 `MCP_ALLOWED_ORIGINS` default to localhost / 127.0.0.1 / the `mcpserver` service
 name on `MCP_PORT`; set them explicitly for any real deployment hostname.
 
-Email integration is configured from the UI (Settings → Email Integration) and
-stored encrypted in the `settings` table; no credentials are committed.
+### Security
+
+`INTERNAL_KEY` is a shared secret on every service-to-service hop: backend →
+ai.engine, ai.engine → mcpserver, mcpserver → backend, ai.engine → backend. It
+authenticates a **service**, not a user, and grants nothing about whose data may
+be read.
+
+| Guarded | Open |
+| --- | --- |
+| ai.engine `POST /agents/*`, `POST /discovery/run` | every `/health` |
+| mcpserver `/mcp` | backend routes the browser calls |
+| backend `POST /findings`, `POST /findings/batch` | |
+
+The split matters in both directions. Those agent routes launch scans and spend
+model budget, and `POST /findings/batch` writes the findings table - unguarded, it
+was world-writable. The browser has no key, so locking its routes would take the
+UI down with it; user authentication is a separate, still-deferred concern tracked
+against `require_principal` in `cyber.backend/app/core/security.py`.
+
+**Fail-closed, with one exception.** The ai.engine and the mcpserver refuse to
+start when `APP_ENV` is anything but `local` and no key is set. The backend does
+not, because it also serves the browser and a backend that will not boot takes the
+whole UI with it - its exposed routes are guarded per route instead. Setting a key
+locally turns enforcement on everywhere, which is the way to exercise the
+production path before deploying it.
+
+Scanning is allowlisted. `SCAN_ALLOWED_TARGETS` bounds what the MCP scan tools
+will touch, defaulting to loopback plus the private ranges; anything outside is
+refused before the scanner starts. Hostnames are never resolved to decide scope,
+because that hands the decision to whoever controls the DNS answer.
+
+Email integration was removed during the restructure - it stored OAuth secrets and
+refresh tokens as plaintext rows served over an unauthenticated `GET`. Credentials
+come from the environment only.
 
 ---
 
@@ -310,9 +362,15 @@ contains a database library.
 - Alembic is async (`alembic/env.py`) and takes its URL from
   `app.core.config`, so the database location is defined in exactly one place.
 - Migrations (`cyber.backend/alembic/versions/`): `0001` baseline findings, `0002`
-  scan intake + finding detail (evidence, asset, agent trace), `0003` finding
-  indexes, `0004` settings table, `0005` CVE IDs as a text array, `0006` runs
-  table, `0007` findings → run association.
+  scan intake + finding detail (evidence, asset, CVE IDs as a text array), `0003`
+  finding indexes, `0004` runs table, `0005` findings → run association. Head is
+  `0005`, asserted in `tests/unit/test_migrations.py`.
+- Revision ids are hand-written and zero-padded, so `make migrate-create` needs
+  `--rev-id NNNN` or it emits a random hex id. A new revision also means updating
+  `HEAD_REVISION` and the expected chain in `tests/unit/test_migrations.py`.
+- The vulnerability agent needed **no** migration: it populates
+  `service`/`port`/`protocol`/`cve_ids`, which already existed, and stores its
+  priority score and factor breakdown in the `evidence` JSONB.
 
 `agent` and `severity` are `VARCHAR` with `CHECK` constraints rather than native
 PostgreSQL enums: the Python `StrEnum` in `cyber.contracts/` stays the single
@@ -346,8 +404,7 @@ Each agent is a self-contained LangGraph package under
 
 ```
 state.py    the graph's state schema
-prompts.py  prompt text, isolated from graph wiring
-tools.py    tools the agent may call
+prompt.py   prompt text, isolated from graph wiring
 nodes.py    node functions
 graph.py    the StateGraph, its edges, and the compiled graph
 ```
@@ -355,8 +412,46 @@ graph.py    the StateGraph, its edges, and the compiled graph
 `agents/vulnerability/` is the reference implementation - its graph is wired
 explicitly so the pattern is readable in one file. The other three build the same
 shape through `agents/common/graph.py`. Each agent sits behind its own router in
-`ai_engine/routers/`, mounted at `POST /agents/<name>/analyze`. Discovery is not
+`app/api/v1/endpoints/`, mounted at `POST /agents/<name>/analyze`. Discovery is not
 an agent - it feeds the pipeline a target list - so it lives on its own router.
+
+### The vulnerability agent's shape
+
+Worth reading before building another one, because the division of labour is the
+point:
+
+```
+intake -> normalize -> correlate --+-> enrich -> prioritize -> reason -+
+                                   |                                  |
+                                   +---------> emit_findings <---------+
+```
+
+| Module | Owns |
+| --- | --- |
+| `sources.py` | one adapter per scanner, all producing the same `Observation` |
+| `observations.py` | the uniform shape rules read; adding a scanner touches no rule |
+| `knowledge.py` + `data/*.json` | the curated knowledge base, validated on import |
+| `versions.py` | messy version comparison, and the refusal to guess |
+| `rules.py` | five rule families producing `Candidate` objects |
+| `candidates.py` | the deterministic unit of detection, with content-addressed ids |
+| `prioritize.py` | the explainable 100-point remediation score |
+| `assessment_schema.py` | the constraint-free LLM-facing schema |
+
+**Findings originate in `correlate`, never in the model.** The model writes the
+prose and may move a severity, but it cannot create a candidate, cannot invent a
+CVE, and cannot set a priority. That is what stops a crafted service banner from
+talking a finding into existence, and it is why the agent still produces real
+findings with no API key and no MCP server - only the wording degrades.
+
+Three consequences worth keeping if you copy the shape:
+
+- **When a version cannot be parsed, emit nothing.** A confident "critical" built
+  on a guess costs more analyst trust than a missed medium (`versions.py`).
+- **No candidates means no model call.** A clean scan is cheap, and an artifact
+  that matched no rule is never shown to a model at all.
+- **Zero findings is three different outcomes** - nothing scanned, unparseable, or
+  genuinely clean - and they are reported distinctly. Collapsing them is how a
+  broken pipeline passes for a healthy one.
 
 ---
 
@@ -369,14 +464,26 @@ a few tests exist specifically to stop the architecture eroding:
 | Test | Guards |
 | --- | --- |
 | `cyber.ai.engine/tests/unit/test_no_database_imports.py` | ai.engine stays free of database code, in source *and* in declared dependencies |
-| `cyber.ai.engine/tests/unit/test_agent_routers.py` | Every agent response validates against the shared `FindingBatch` with `extra="forbid"` |
-| `cyber.ai.engine/tests/unit/test_graphs.py` | All four graphs compile and run; untrusted input reaches the prompt only fenced |
+| `cyber.ai.engine/tests/unit/test_agent_routers.py` | Every agent response validates against the shared `FindingBatch` with `extra="forbid"`, and the vulnerability agent emits real findings with no model configured |
+| `cyber.ai.engine/tests/unit/test_vulnerability_rules.py` | The rule engine: unparseable versions emit nothing, injection is caught deterministically, candidate ids are stable |
+| `cyber.ai.engine/tests/unit/test_prioritize.py` | Ranking is explainable, reproducible, and puts a reachable high above an unreachable critical |
+| `cyber.ai.engine/tests/unit/test_mcp_client.py` | Tools are allowlisted (no `run_agent` recursion) and an MCP outage costs enrichment, not detection |
+| `cyber.ai.engine/tests/unit/test_assess_route.py` | The parsed-scan contract, and the internal-key boundary in both postures |
+| `cyber.ai.engine/tests/unit/test_graphs.py` | All four graphs compile and run; untrusted input reaches the prompt only fenced, and only when there is something to assess |
+| `cyber.ai.engine/tests/unit/test_no_database_imports.py` | ai.engine stays free of database code, in source *and* declared dependencies |
 | `cyber.ai.engine/tests/unit/test_discovery.py` | Interface filtering, service parsing, and graceful degradation when `nmap` is missing |
 | `cyber.ai.engine/tests/unit/test_llm_factory.py` | Provider selection, lazy construction, and the no-key fallback |
+| `cyber.backend/tests/unit/test_ai_engine_client.py` | Which path each request goes to - the assertion whose absence let every uploaded scan 422 unnoticed |
+| `cyber.backend/tests/unit/test_internal_key.py` | The write routes require the key **and** the browser's routes do not |
 | `cyber.backend/tests/unit/test_finding_contract.py` | The `findings` columns still match the shared contract exactly |
 | `cyber.backend/tests/unit/test_migrations.py` | The migrations' DDL matches the ORM models, rendered offline with no database |
 | `cyber.backend/tests/unit/test_runs.py` / `test_discovery.py` | Run lifecycle and discovery proxy endpoints |
+| `cyber.mcp.server/tests/unit/test_tools.py` | The scan allowlist, port-spec validation, and CVE lookup failing as data |
+| `cyber.mcp.server/tests/unit/test_backend_proxies.py` | The exact backend path each tool requests, and that `mcpserver` is an allowed Host |
 | `cyber.mcp.server/tests/unit/test_server.py` | A real MCP `initialize` handshake succeeds over Streamable HTTP |
+
+Both `cyber.ai.engine` and `cyber.mcp.server` suites pass with `INTERNAL_KEY` set
+and unset, so the auth posture cannot silently change what the tests cover.
 
 Two things cannot be checked without infrastructure: `GET /health/db` and the
 findings routes need PostgreSQL, and the arq worker needs Redis. `make up`
@@ -384,10 +491,18 @@ provides both.
 
 ## Deferred
 
-Marked `TODO(phase-2)` in the code:
-
-- Real MCP tools (`mcpserver` registers one descriptive tool and nothing else)
-- The correlation engine that groups findings into incidents
-- Authentication, RBAC, and audit beyond the placeholder in `core/security.py`
-- Threat-intel integrations, ML models, network baselining
-- Scheduled (non-interactive) runs and email auto-polling
+- **Post-fix verification.** Re-scan, diff candidate ids, and auto-resolve what no
+  longer fires. `derive_candidate_id` is already stable across runs specifically to
+  make this cheap.
+- **An asset inventory.** There is no `assets` table; business criticality is an
+  operator-supplied `context` value rather than a stored property, and exposure is
+  classified rather than looked up.
+- **Live threat intel.** `known_cves.json` is a small hand-verified set, not a
+  feed. NVD / EPSS / KEV enrichment would replace the loader in `knowledge.py` and
+  nothing else.
+- **More scanner tools.** Parsers exist for Trivy, ZAP, OpenVAS, Suricata and Zeek;
+  only `nmap` is installed in the MCP image.
+- Authentication, RBAC, and audit for **users**, beyond the placeholder in
+  `core/security.py`. The internal key covers services only.
+- The correlation engine that groups findings into incidents.
+- Scheduled (non-interactive) runs.

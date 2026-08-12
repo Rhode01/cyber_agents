@@ -1,0 +1,18 @@
+Received: from smtp.newsletter.example (198.51.100.20) by mx.corp.example; Sun, 09 Aug 2026 12:00:01 +0000
+Authentication-Results: mx.corp.example; spf=pass; dkim=pass; dmarc=pass
+Message-ID: <html-only-42@newsletter.example>
+Date: Sun, 09 Aug 2026 12:00:00 +0000
+From: Weekly Digest <digest@newsletter.example>
+To: analyst@corp.example
+Subject: Your weekly security digest
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><style>body { font-family: sans-serif; }</style>
+<script>var tracking =3D true;</script></head><body>
+<h1>This week in security</h1>
+<p>Three new advisories were published. &nbsp;Read them below.</p>
+<p><a href=3D"https://newsletter.example/digest/2026-32">Open the digest</a></p>
+<p><a href=3D"https://newsletter.example/unsubscribe?id=3D42">Unsubscribe</a></p>
+</body></html>

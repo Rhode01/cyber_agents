@@ -8,13 +8,16 @@ from fastapi import APIRouter
 from app.agents.common.state import initial_state
 from app.agents.webapp.graph import GRAPH
 from app.core.logging import get_logger
+from app.core.security import InternalKeyGuard
 from app.schemas.requests import AnalyzeRequest, AnalyzeResponse
 
 logger = get_logger(__name__)
 
 AGENT = AgentKind.webapp
 
-router = APIRouter(prefix=f"/agents/{AGENT.value}", tags=[AGENT.value])
+router = APIRouter(
+    prefix=f"/agents/{AGENT.value}", tags=[AGENT.value], dependencies=[InternalKeyGuard]
+)
 
 
 @router.post(

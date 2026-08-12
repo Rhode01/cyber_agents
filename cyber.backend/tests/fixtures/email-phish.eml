@@ -1,0 +1,40 @@
+Received: from unknown (mail-relay-7712.hosting-cheap.example [45.61.188.203])
+	by mx.corp.example (Postfix) with ESMTP id 91BB2D1F04
+	for <analyst@corp.example>; Mon, 10 Aug 2026 03:41:09 +0000 (UTC)
+Authentication-Results: mx.corp.example;
+	spf=fail smtp.mailfrom=paypa1.com;
+	dkim=none;
+	dmarc=fail header.from=paypa1.com
+Message-ID: <8814-aa3c-invoice@paypa1.com>
+Date: Mon, 10 Aug 2026 03:41:02 +0000
+Return-Path: <bounces@mail-relay-7712.hosting-cheap.example>
+From: "PayPal Service" <service@paypa1.com>
+Reply-To: recovery-desk@secure-mail-inbox.example
+To: analyst@corp.example
+Subject: Your account will be suspended within 24 hours - immediate action required
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix_7712"
+
+--mix_7712
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html><body>
+<p>Dear Customer,</p>
+<p>We detected unusual activity on your account. Your account will be suspended
+within 24 hours unless you confirm your identity.</p>
+<p><a href="http://45.61.188.203/paypal/login/verify?session=8814aa3c">https://www.paypal.com/signin</a></p>
+<p>Failure to act will result in permanent closure. Please verify your account now.</p>
+<p><a href="https://bit.ly/3xQz1Ab">Alternative link</a></p>
+<p>Sincerely,<br>The PayPal Security Team</p>
+</body></html>
+
+--mix_7712
+Content-Type: application/octet-stream; name="invoice.pdf.exe"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="invoice.pdf.exe"
+
+TVpQAAIAAAAEAA8A//8AALgAAAAAAAAAQAAaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAABAAAAugAAAAAAAAA=
+
+--mix_7712--

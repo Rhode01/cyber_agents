@@ -1,0 +1,50 @@
+{
+  "_comment": [
+    "Attachment risk, judged from metadata only. The parser hashes attachment bytes",
+    "and discards them, so nothing here can inspect content - no archive is opened, no",
+    "macro is extracted, nothing is executed. That is a deliberate limit, not a gap:",
+    "the platform never needs to hold a malware sample to say a .exe arrived.",
+    "",
+    "`executable` extensions run code on a double-click. `macro` formats carry code",
+    "that a prompt can be talked into enabling. `container` formats are the standard",
+    "way to smuggle either past a scanner, and are also how the mark-of-the-web is",
+    "stripped so Windows stops warning about the file inside.",
+    "",
+    "`expected_types` maps an extension to the MIME types a legitimate sender declares",
+    "for it. A mismatch means the sender's own client disagrees with the filename,",
+    "which is either misconfiguration or disguise."
+  ],
+  "executable": [
+    ".exe", ".scr", ".com", ".pif", ".cpl", ".msi", ".msp", ".bat", ".cmd", ".ps1",
+    ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".hta", ".jar", ".msc",
+    ".reg", ".lnk", ".url", ".inf", ".application", ".gadget", ".chm", ".pyc", ".sh",
+    ".run", ".bin", ".apk", ".dmg", ".app", ".scpt", ".dll", ".ocx", ".sys"
+  ],
+  "macro": [
+    ".docm", ".dotm", ".xlsm", ".xltm", ".xlam", ".pptm", ".potm", ".ppam", ".sldm",
+    ".xls", ".doc", ".ppt", ".xlsb", ".mdb", ".accdb"
+  ],
+  "container": [
+    ".iso", ".img", ".vhd", ".vhdx", ".zip", ".rar", ".7z", ".cab", ".ace", ".arj",
+    ".gz", ".tar", ".tgz", ".bz2", ".xz", ".lzh", ".z"
+  ],
+  "expected_types": {
+    ".pdf": ["application/pdf"],
+    ".docx": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    ".xlsx": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+    ".pptx": ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    ".zip": ["application/zip", "application/x-zip-compressed"],
+    ".png": ["image/png"],
+    ".jpg": ["image/jpeg"],
+    ".jpeg": ["image/jpeg"],
+    ".gif": ["image/gif"],
+    ".txt": ["text/plain"],
+    ".csv": ["text/csv", "application/csv"],
+    ".html": ["text/html"],
+    ".ics": ["text/calendar"]
+  },
+  "double_extension_first": [
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".jpg", ".jpeg",
+    ".png", ".gif", ".csv", ".rtf", ".htm", ".html", ".zip", ".mp3", ".mp4", ".avi"
+  ]
+}

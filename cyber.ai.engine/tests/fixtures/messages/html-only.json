@@ -1,0 +1,58 @@
+{
+  "format": "email_mime",
+  "message_id": "<html-only-42@newsletter.example>",
+  "subject": "Your weekly security digest",
+  "date": "Sun, 09 Aug 2026 12:00:00 +0000",
+  "sender": {
+    "display_name": "Weekly Digest",
+    "address": "digest@newsletter.example",
+    "domain": "newsletter.example"
+  },
+  "reply_to": null,
+  "return_path": null,
+  "to": [
+    {
+      "display_name": "",
+      "address": "analyst@corp.example",
+      "domain": "corp.example"
+    }
+  ],
+  "auth": {
+    "spf": "pass",
+    "dkim": "pass",
+    "dmarc": "pass",
+    "present": true
+  },
+  "received_chain": [
+    "from smtp.newsletter.example (198.51.100.20) by mx.corp.example; Sun, 09 Aug 2026 12:00:01 +0000"
+  ],
+  "headers_present": [
+    "authentication-results",
+    "content-transfer-encoding",
+    "content-type",
+    "date",
+    "from",
+    "message-id",
+    "mime-version",
+    "received",
+    "subject",
+    "to"
+  ],
+  "body_text": " \n This week in security \n Three new advisories were published. Read them below. \n Open the digest \n Unsubscribe \n \n",
+  "body_html_present": true,
+  "links": [
+    {
+      "url": "https://newsletter.example/digest/2026-32",
+      "scheme": "https",
+      "host": "newsletter.example",
+      "anchor_text": "Open the digest"
+    },
+    {
+      "url": "https://newsletter.example/unsubscribe?id=42",
+      "scheme": "https",
+      "host": "newsletter.example",
+      "anchor_text": "Unsubscribe"
+    }
+  ],
+  "attachments": []
+}

@@ -1,0 +1,20 @@
+# This module builds from its own directory as the build context, so the
+# repository-root .dockerignore does not apply here - it even excludes this
+# directory outright, for the two builds that do use the root as their context.
+#
+# Without this file, `COPY . /src` bakes the local virtualenv and every cache
+# directory into the image.
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Left over from the module rename; not part of the application.
+mcpserver/

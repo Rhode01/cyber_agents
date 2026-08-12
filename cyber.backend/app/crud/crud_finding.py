@@ -8,12 +8,13 @@ definition instead of being inlined in a service.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
-from cyber_contracts import AgentKind, FindingCreate, FindingType, Severity
+from cyber_contracts import AgentKind, FindingCreate, FindingStatus, FindingType, Severity
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.elements import ColumnElement, UnaryExpression
 
 from app.crud.crud_base import CRUDBase
 from app.models.finding import Finding
@@ -39,6 +40,7 @@ DedupeKey = tuple[
     str,          # title
     UUID | None,  # run_id
     UUID | None,  # scan_id
+    UUID | None,  # message_id
 ]
 
 
@@ -53,6 +55,7 @@ def dedupe_key(finding: FindingCreate) -> DedupeKey:
         finding.title,
         finding.run_id,
         finding.scan_id,
+        finding.message_id,
     )
 
 
@@ -66,6 +69,7 @@ def _row_key(row: Finding) -> DedupeKey:
         row.title,
         row.run_id,
         row.scan_id,
+        row.message_id,
     )
 
 
@@ -80,10 +84,14 @@ class CRUDFinding(CRUDBase[Finding, FindingCreate, FindingStatusUpdate]):
         finding_type: FindingType | None = None,
         scan_id: UUID | None = None,
         run_id: UUID | None = None,
+        message_id: UUID | None = None,
         asset: str | None = None,
+        status: FindingStatus | None = None,
     ) -> list[ColumnElement[bool]]:
         """Translate optional query params into SQLAlchemy predicates."""
         filters: list[ColumnElement[bool]] = []
+        if status is not None:
+            filters.append(Finding.status == status.value)
         if agent is not None:
             filters.append(Finding.agent == agent.value)
         if severity is not None:
@@ -94,12 +102,14 @@ class CRUDFinding(CRUDBase[Finding, FindingCreate, FindingStatusUpdate]):
             filters.append(Finding.scan_id == scan_id)
         if run_id is not None:
             filters.append(Finding.run_id == run_id)
+        if message_id is not None:
+            filters.append(Finding.message_id == message_id)
         if asset is not None:
             filters.append(Finding.asset == asset)
         return filters
 
     @staticmethod
-    def newest_first() -> ColumnElement[object]:
+    def newest_first() -> UnaryExpression[Any]:
         """Findings are ordered by when the activity was observed, not inserted."""
         return Finding.detected_at.desc()
 
@@ -118,6 +128,34 @@ class CRUDFinding(CRUDBase[Finding, FindingCreate, FindingStatusUpdate]):
         )
         rows = (await db.execute(statement)).all()
         return [(Severity(severity), int(count)) for severity, count in rows]
+
+    async def open_by_candidate_ids(
+        self,
+        db: AsyncSession,
+        *,
+        assets: list[str],
+        statuses: tuple[str, ...],
+    ) -> list[Finding]:
+        """Open findings on these assets that carry a rule-engine candidate id.
+
+        Filtered on the JSONB path rather than a column: ``candidate_id`` lives in
+        ``evidence``, and an expression index on ``(evidence->>'candidate_id')``
+        keeps the lookup cheap without widening the Finding contract.
+
+        Selecting by asset rather than by candidate id is deliberate. A
+        verification pass has to see the findings that are *absent* from the fresh
+        scan - those are exactly the ones whose ids it cannot supply.
+        """
+        if not assets:
+            return []
+
+        statement = select(Finding).where(
+            Finding.asset.in_(assets),
+            Finding.status.in_(statuses),
+            Finding.evidence["candidate_id"].astext.isnot(None),
+        )
+        rows = (await db.execute(statement)).scalars().all()
+        return list(rows)
 
     async def existing_dedupe_keys(
         self, db: AsyncSession, *, findings: list[FindingCreate]

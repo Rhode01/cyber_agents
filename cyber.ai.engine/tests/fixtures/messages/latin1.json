@@ -1,0 +1,52 @@
+{
+  "format": "email_mime",
+  "message_id": "<rechnung-9912@rechnung.example>",
+  "subject": "Zahlungsr�ckstand - sofortige �berpr�fung erforderlich",
+  "date": "Sat, 08 Aug 2026 08:29:58 +0000",
+  "sender": {
+    "display_name": "Rechnungsstelle",
+    "address": "buchhaltung@rechnung.example",
+    "domain": "rechnung.example"
+  },
+  "reply_to": null,
+  "return_path": null,
+  "to": [
+    {
+      "display_name": "",
+      "address": "analyst@corp.example",
+      "domain": "corp.example"
+    }
+  ],
+  "auth": {
+    "spf": "softfail",
+    "dkim": "none",
+    "dmarc": "fail",
+    "present": true
+  },
+  "received_chain": [
+    "from mail.rechnung.example (203.0.113.9) by mx.corp.example; Sat, 08 Aug 2026 08:30:00 +0000"
+  ],
+  "headers_present": [
+    "authentication-results",
+    "content-transfer-encoding",
+    "content-type",
+    "date",
+    "from",
+    "message-id",
+    "mime-version",
+    "received",
+    "subject",
+    "to"
+  ],
+  "body_text": "Sehr geehrte Damen und Herren,\r\n\r\nIhre Rechnung ist �berf�llig. Bitte begleichen Sie den Betrag von 1.240,00 ?\r\ninnerhalb von 48 Stunden: http://rechnung-portal.example/zahlung?id=9912\r\n\r\nMit freundlichen Gr��en\r\n",
+  "body_html_present": false,
+  "links": [
+    {
+      "url": "http://rechnung-portal.example/zahlung?id=9912",
+      "scheme": "http",
+      "host": "rechnung-portal.example",
+      "anchor_text": ""
+    }
+  ],
+  "attachments": []
+}

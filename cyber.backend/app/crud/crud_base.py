@@ -16,7 +16,7 @@ Two deliberate differences from the usual template:
 
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -25,18 +25,14 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.base import Base
 
-ModelType = TypeVar("ModelType", bound=Base)
-CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
-UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
-
-class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+class CRUDBase[ModelType: Base, CreateSchemaType: BaseModel, UpdateSchemaType: BaseModel]:
     """Create, read, update and delete for one SQLAlchemy model."""
 
     def __init__(self, model: type[ModelType]) -> None:
         self.model = model
 
-    async def get(self, db: AsyncSession, id: Any) -> ModelType | None:  # noqa: A002
+    async def get(self, db: AsyncSession, id: Any) -> ModelType | None:
         """Return one row by primary key, or None."""
         return await db.get(self.model, id)
 
@@ -99,7 +95,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         await db.refresh(db_obj)
         return db_obj
 
-    async def delete(self, db: AsyncSession, *, id: Any) -> ModelType | None:  # noqa: A002
+    async def delete(self, db: AsyncSession, *, id: Any) -> ModelType | None:
         """Delete one row by primary key and return what was removed."""
         row = await self.get(db, id)
         if row is not None:

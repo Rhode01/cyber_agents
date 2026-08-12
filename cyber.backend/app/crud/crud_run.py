@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy.sql.elements import ColumnElement
+from typing import Any
+
+from sqlalchemy.sql.elements import UnaryExpression
 
 from app.crud.crud_base import CRUDBase
 from app.models.run import Run
@@ -13,7 +15,7 @@ class CRUDRun(CRUDBase[Run, RunCreate, RunUpdate]):
     """Runs, newest first."""
 
     @staticmethod
-    def newest_first() -> ColumnElement[object]:
+    def newest_first() -> UnaryExpression[Any]:
         return Run.created_at.desc()
 
 

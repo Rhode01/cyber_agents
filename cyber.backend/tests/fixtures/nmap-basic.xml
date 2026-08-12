@@ -10,6 +10,7 @@
        10.0.0.7  down             -> no ports, must survive as a host with none
 -->
 <nmaprun scanner="nmap" args="nmap -sV -oX - 10.0.0.0/29" start="1785312000" version="7.94" xmloutputversion="1.05">
+<scaninfo type="syn" protocol="tcp" numservices="6" services="22,23,80,3389,6379,8080"/>
   <verbose level="0"/>
   <debugging level="0"/>
   <host starttime="1785312001" endtime="1785312044">

@@ -23,6 +23,16 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/src/.venv/bin:${PATH}"
 
+# nmap is the scanner behind the nmap_service_scan tool. Tool execution lives in
+# this service, so the binary lives in this image. The ai.engine image also
+# carries nmap, deliberately: it needs one for self-discovery of its own
+# interfaces, which is not an agent tool and does not come through MCP.
+RUN apt-get update \
+ && apt-get install --no-install-recommends -y \
+      nmap \
+      ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app && useradd --system --gid app --home-dir /src app
 
 WORKDIR /src

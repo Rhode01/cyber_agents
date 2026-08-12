@@ -1,0 +1,74 @@
+{
+  "format": "email_mime",
+  "message_id": "<8814-aa3c-invoice@paypa1.com>",
+  "subject": "Your account will be suspended within 24 hours - immediate action required",
+  "date": "Mon, 10 Aug 2026 03:41:02 +0000",
+  "sender": {
+    "display_name": "PayPal Service",
+    "address": "service@paypa1.com",
+    "domain": "paypa1.com"
+  },
+  "reply_to": {
+    "display_name": "",
+    "address": "recovery-desk@secure-mail-inbox.example",
+    "domain": "secure-mail-inbox.example"
+  },
+  "return_path": {
+    "display_name": "",
+    "address": "bounces@mail-relay-7712.hosting-cheap.example",
+    "domain": "mail-relay-7712.hosting-cheap.example"
+  },
+  "to": [
+    {
+      "display_name": "",
+      "address": "analyst@corp.example",
+      "domain": "corp.example"
+    }
+  ],
+  "auth": {
+    "spf": "fail",
+    "dkim": "none",
+    "dmarc": "fail",
+    "present": true
+  },
+  "received_chain": [
+    "from unknown (mail-relay-7712.hosting-cheap.example [45.61.188.203])\tby mx.corp.example (Postfix) with ESMTP id 91BB2D1F04\tfor <analyst@corp.example>; Mon, 10 Aug 2026 03:41:09 +0000 (UTC)"
+  ],
+  "headers_present": [
+    "authentication-results",
+    "content-type",
+    "date",
+    "from",
+    "message-id",
+    "mime-version",
+    "received",
+    "reply-to",
+    "return-path",
+    "subject",
+    "to"
+  ],
+  "body_text": " \n Dear Customer, \n We detected unusual activity on your account. Your account will be suspended\nwithin 24 hours unless you confirm your identity. \n https://www.paypal.com/signin \n Failure to act will result in permanent closure. Please verify your account now. \n Alternative link \n Sincerely, The PayPal Security Team \n \n",
+  "body_html_present": true,
+  "links": [
+    {
+      "url": "http://45.61.188.203/paypal/login/verify?session=8814aa3c",
+      "scheme": "http",
+      "host": "45.61.188.203",
+      "anchor_text": "https://www.paypal.com/signin"
+    },
+    {
+      "url": "https://bit.ly/3xQz1Ab",
+      "scheme": "https",
+      "host": "bit.ly",
+      "anchor_text": "Alternative link"
+    }
+  ],
+  "attachments": [
+    {
+      "filename": "invoice.pdf.exe",
+      "content_type": "application/octet-stream",
+      "size_bytes": 77,
+      "sha256": "4a4adb6782ed0d72cf292500a2429b9a95e2aaf59000180f7610e3bc00ffd19c"
+    }
+  ]
+}

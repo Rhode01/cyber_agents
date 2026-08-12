@@ -22,11 +22,22 @@ from langchain_openai import ChatOpenAI
 from app.core.config import get_settings
 from app.core.logging import get_logger
 
+# Re-exported, not defined here. The canonical definition moved to app.llm.errors so
+# it can carry a status code and a hint like every other assessment failure; this
+# alias keeps the agents that import it from this module working unchanged.
+from app.llm.errors import LlmNotConfiguredError
+
 logger = get_logger(__name__)
 
-
-class LlmNotConfiguredError(RuntimeError):
-    """No API key is present, so a live call could not succeed."""
+__all__ = [
+    "LlmNotConfiguredError",
+    "describe_model",
+    "extract_message_text",
+    "get_chat_model",
+    "require_configured_chat_model",
+    "reset_chat_model_cache",
+    "resolve_provider",
+]
 
 
 def extract_message_text(response: BaseMessage) -> str:
@@ -99,20 +110,41 @@ def get_chat_model(
     )
 
 
+def resolve_provider(context: dict[str, str] | None = None) -> str:
+    """Which provider a call with this context would actually use.
+
+    Extracted so ``describe_model`` and ``require_configured_chat_model`` cannot
+    disagree. They used to: the former hardcoded "openai", so /health reported the
+    wrong provider whenever Anthropic was selected, and the pre-flight error named
+    the wrong environment variable.
+    """
+    return (context or {}).get("llm_provider", "openai")
+
+
 def require_configured_chat_model(context: dict[str, str] | None = None) -> BaseChatModel:
-    """Return the chat model, refusing if no credentials are present."""
+    """Return the chat model, refusing if no credentials are present.
+
+    Refusing here is a **pre-flight** check: it happens before any prompt is built,
+    so a misconfigured deployment fails on the first request instead of after a
+    60-second timeout.
+    """
     settings = get_settings()
     ctx = context or {}
-    
-    provider = ctx.get("llm_provider", "openai")
+
+    provider = resolve_provider(ctx)
     api_key = ctx.get("llm_api_key") or ctx.get("openai_api_key") or settings.openai_api_key
     model_name = ctx.get("llm_model") or settings.openai_model
     base_url = ctx.get("llm_base_url") or settings.resolved_base_url
-    
+
     if not api_key:
-        msg = "LLM API KEY is not set, so the ai.engine cannot call the model"
+        # Name the variable that is actually missing for the provider in play, not
+        # a generic "the key". An operator reading this should not have to work out
+        # which of two keys the deployment wanted.
+        variable = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+        msg = f"{variable} is not set, so the ai.engine cannot call the {provider} model"
         raise LlmNotConfiguredError(msg)
-        
+
+
     return get_chat_model(
         provider=provider,
         api_key=api_key,
@@ -124,11 +156,19 @@ def require_configured_chat_model(context: dict[str, str] | None = None) -> Base
     )
 
 
-def describe_model() -> dict[str, Any]:
-    """Report the resolved LLM configuration without exposing the key."""
+def describe_model(context: dict[str, str] | None = None) -> dict[str, Any]:
+    """Report the resolved LLM configuration without exposing the key.
+
+    Takes the same ``context`` as ``require_configured_chat_model`` and resolves the
+    provider through the same helper, so /health cannot claim one provider while a
+    request would use another.
+    """
     settings = get_settings()
+    provider = resolve_provider(context)
+    if provider == "openai" and settings.resolved_base_url is not None:
+        provider = "openai-compatible"
     return {
-        "provider": "openai" if settings.resolved_base_url is None else "openai-compatible",
+        "provider": provider,
         "model": settings.openai_model,
         "base_url": settings.resolved_base_url,
         "temperature": settings.openai_temperature,

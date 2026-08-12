@@ -28,6 +28,11 @@ function findingMatchesService(finding: Finding, host: string, port: number): bo
     (assetHost === 'localhost' && h.startsWith('127.'))
   if (!hostMatches) return false
 
+  // The finding's own port is authoritative when it has one. The vulnerability
+  // agent sets `port` and leaves `asset` as a bare host, so falling straight
+  // through to `return true` would match every finding on a host against every
+  // service on it - showing an SSH finding beside a MySQL service.
+  if (finding.port !== null && finding.port !== undefined) return finding.port === port
   if (assetPort) return String(port) === assetPort
   return true
 }
@@ -106,28 +111,44 @@ export default function ServicesPage() {
     setFindings(all)
   }
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [report, allFindings] = await Promise.all([runDiscovery(), loadFindings()])
-      setReport(report)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Discovery failed')
-    } finally {
-      setLoading(false)
-    }
+  /** Discovery and findings together. `loadFindings` sets its own state, so only
+   *  the report comes back. */
+  const load = async (): Promise<void> => {
+    const [discovered] = await Promise.all([runDiscovery(), loadFindings()])
+    setReport(discovered)
   }
 
   useEffect(() => {
-    load()
+    // Every state write happens after an await, so nothing is set synchronously in
+    // the effect body - that cascades renders, and `loading` already starts true.
+    // `cancelled` stops a slow discovery writing into an unmounted page.
+    let cancelled = false
+
+    void (async () => {
+      try {
+        await load()
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Discovery failed')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** The Re-scan button. An event handler, so showing the spinner up front here is
+   *  a direct response to a click rather than a cascading render. */
   const rescanned = async () => {
     setScanning(true)
+    setError(null)
     try {
       await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Discovery failed')
     } finally {
       setScanning(false)
     }

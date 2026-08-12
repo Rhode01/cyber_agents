@@ -56,6 +56,18 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "ANN201"]
 
+# RUF001/2/3 flag "ambiguous unicode" - a Cyrillic а that looks like a Latin a, a
+# right-to-left override. These files exist *because* of those characters: the homoglyph
+# map is the lookalike detector's whole substrate, the bidi set is what catches a disguised
+# filename, and the tests assert that both survive parsing intact. Ruff is correctly
+# identifying deliberate content, so the rule is disabled here and nowhere else - it stays
+# on for every other module, where an ambiguous character really would be a mistake.
+"app/agents/phishing/lookalike.py" = ["RUF001", "RUF002", "RUF003"]
+"app/agents/phishing/rules/attachments.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/unit/test_lookalike.py" = ["S101", "ANN201", "RUF001", "RUF002", "RUF003"]
+"tests/unit/test_phishing_rules.py" = ["S101", "ANN201", "RUF001", "RUF002", "RUF003"]
+"tests/unit/test_phishing_prompt.py" = ["S101", "ANN201", "RUF001", "RUF002", "RUF003"]
+
 # ------------------------------------------------------------------- mypy --
 # Our own code is checked strictly. The LangChain and LangGraph surface is
 # treated as untyped on purpose: its generic parameters move between minor

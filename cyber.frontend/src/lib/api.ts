@@ -9,7 +9,9 @@ import type {
   BackendHealth,
   Finding,
   FindingList,
+  FindingStatus,
   FindingSummary,
+  FindingVerifyResponse,
   AgentRunRequest,
   AgentRunResponse,
   AgentKind,
@@ -94,8 +96,41 @@ export function fetchBackendHealth(): Promise<BackendHealth> {
   return request<BackendHealth>('/health')
 }
 
-export function fetchFindings(limit = 20, offset = 0): Promise<FindingList> {
-  return request<FindingList>(`/findings?limit=${limit}&offset=${offset}`)
+/**
+ * A page of findings, newest observation first.
+ *
+ * `asset` filters server-side on an exact match, so drilling into one host from
+ * the riskiest-assets panel stays correct past the page size instead of filtering
+ * whatever happened to be fetched.
+ */
+export function fetchFindings(
+  limit = 20,
+  offset = 0,
+  asset?: string,
+  status?: FindingStatus,
+): Promise<FindingList> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (asset) params.set('asset', asset)
+  if (status) params.set('status', status)
+  return request<FindingList>(`/findings?${params.toString()}`)
+}
+
+/**
+ * Queue a re-check of findings after a fix.
+ *
+ * Returns 202 with a job id: the re-check runs a scan, so the result arrives by
+ * polling the findings afterwards rather than in this response. A finding that
+ * closes carries a `verification` entry saying what proved it; one that could not
+ * be confirmed carries the reason instead.
+ */
+export function verifyFindings(payload: {
+  finding_ids?: string[]
+  asset?: string
+}): Promise<FindingVerifyResponse> {
+  return request<FindingVerifyResponse>('/findings/verify', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export function fetchFindingById(id: string): Promise<Finding> {

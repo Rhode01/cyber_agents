@@ -11,6 +11,7 @@ import {
   SEVERITY_ORDER,
   emptySeverityCounts,
 } from '@/lib/severity'
+import { OPEN_STATUSES, readAssetRanking } from '@/lib/findings'
 import { cn } from '@/lib/utils'
 import type { AgentTraceEntry, BackendHealth, Finding, ModuleStatus, RunRead } from '@/types'
 
@@ -152,16 +153,22 @@ export default function Home() {
   const stats = useMemo(() => {
     const counts = emptySeverityCounts()
     const byAgent: Record<string, number> = {}
-    for (const f of findings ?? []) {
+    // Open only. A resolved finding has been dealt with, and counting it as
+    // exposure is how a dashboard keeps reporting work that is already done.
+    const open = (findings ?? []).filter((f) => OPEN_STATUSES.includes(f.status))
+    for (const f of open) {
       counts[f.severity] = (counts[f.severity] ?? 0) + 1
       byAgent[f.agent] = (byAgent[f.agent] ?? 0) + 1
     }
-    const total = findings?.length ?? 0
-    return { counts, byAgent, total }
+    return { counts, byAgent, total: open.length }
   }, [findings])
 
   const maxSeverity = Math.max(1, ...SEVERITY_ORDER.map((s) => stats.counts[s]))
   const recent = findings?.slice(0, 6) ?? []
+
+  /** Ranked by the ai.engine on each asset's single worst finding, not on volume:
+   *  ten mediums are a backlog, one critical is an incident. */
+  const assetRanking = useMemo(() => readAssetRanking(findings ?? []).slice(0, 6), [findings])
 
   const criticalPct = stats.total ? (stats.counts.critical / stats.total) * 100 : 0
 
@@ -279,6 +286,46 @@ export default function Home() {
           )}
         </section>
       </div>
+
+      {assetRanking.length > 0 && (
+        <section className="panel">
+          <h2>Riskiest assets</h2>
+          <p className="mt-0 mb-4 text-xs text-faint">
+            Ranked on each asset&apos;s single worst finding rather than how many it has, so one
+            critical outranks a long tail of lows. Scored deterministically by the ai.engine.
+          </p>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {assetRanking.map((risk) => (
+              <li
+                key={risk.asset}
+                className="flex flex-wrap items-center gap-3 rounded-[10px] border border-border bg-panel-2 px-4 py-3"
+              >
+                <SeverityBadge severity={risk.worst_severity} size="sm" />
+                <Link
+                  href={`/findings?asset=${encodeURIComponent(risk.asset)}`}
+                  className="min-w-0 flex-1 truncate font-mono text-sm text-text no-underline hover:text-accent"
+                  title={risk.asset}
+                >
+                  {risk.asset}
+                </Link>
+                <span className="flex items-center gap-1.5">
+                  {SEVERITY_ORDER.filter((sev) => risk.severities[sev]).map((sev) => (
+                    <span key={sev} className="flex items-center gap-1">
+                      <SeverityDot severity={sev} />
+                      <span className="font-mono text-[0.7rem] tabular-nums text-faint">
+                        {risk.severities[sev]}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+                <span className="font-mono text-xs whitespace-nowrap text-muted">
+                  worst <span className="tabular-nums text-accent">{Math.round(risk.top_score)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="panel">
         <div

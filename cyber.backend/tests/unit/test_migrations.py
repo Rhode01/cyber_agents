@@ -16,12 +16,13 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import Table
 
 from app.models.finding import Finding as FindingModel
+from app.models.message import Message as MessageModel
 from app.models.run import Run as RunModel
 from app.models.scan import Scan as ScanModel
 
 # tests/unit/ -> tests/ -> the module root
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-HEAD_REVISION = "0005"
+HEAD_REVISION = "0007"
 
 
 def _config() -> Config:
@@ -50,10 +51,13 @@ def test_the_revision_chain_is_linear_and_rooted() -> None:
     # the restructure: the first stored plaintext secrets, and the second called
     # jsonb_typeof() on a column 0002 already creates as text[], which fails on
     # any fresh database. The runs migrations were renumbered to close the gap.
-    expected = ["0005", "0004", "0003", "0002", "0001"]
+    expected = ["0007", "0006", "0005", "0004", "0003", "0002", "0001"]
     assert [r.revision for r in revisions] == expected
     assert revisions[-1].down_revision is None
-    assert revisions[0].down_revision == "0004"
+    # Derived from `expected` rather than hardcoded: this assertion previously
+    # named the old head's parent, so every new migration silently broke it in a
+    # way that read as a chain problem rather than a stale test.
+    assert [r.down_revision for r in revisions] == [*expected[1:], None]
 
 
 def test_head_is_reachable() -> None:
@@ -71,7 +75,7 @@ def test_migration_ddl_matches_the_orm_models() -> None:
     """
     sql = _render_sql()
 
-    for model in (FindingModel, RunModel, ScanModel):
+    for model in (FindingModel, MessageModel, RunModel, ScanModel):
         table = model.__table__
         assert isinstance(table, Table)
 

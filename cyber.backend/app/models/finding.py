@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column
@@ -52,6 +53,11 @@ class Finding(Base):
         CheckConstraint(_in_clause("status", FINDING_STATUS_VALUES), name="status"),
         CheckConstraint("port IS NULL OR (port >= 1 AND port <= 65535)", name="port"),
         Index("ix_findings_detected_at", "detected_at"),
+        # Expression index, not a column. The verification loop joins a stored
+        # finding to a fresh scan on the rule engine's candidate id, which lives in
+        # `evidence` - promoting it to a column would widen the shared Finding
+        # contract for something only this service needs.
+        Index("ix_findings_evidence_candidate_id", text("(evidence->>'candidate_id')")),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -94,6 +100,15 @@ class Finding(Base):
     scan_id: Mapped[uuid.UUID | None] = mapped_column(
         postgresql.UUID(as_uuid=True),
         ForeignKey("scans.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Same SET NULL rationale as scan_id. Our own intake row id, not the
+    # attacker-supplied RFC 5322 Message-ID, which lives in evidence.
+    # No explicit name: Base's convention derives fk_findings_message_id_messages.
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

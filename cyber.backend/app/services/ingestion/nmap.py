@@ -39,6 +39,11 @@ MAX_PORTS_PER_HOST: Final = 512
 MAX_HOSTNAMES_PER_HOST: Final = 16
 MAX_CPE_PER_PORT: Final = 8
 
+# `scaninfo services` is routinely "1-65535". Expanding that would put a 65k-element
+# list on every upload to answer a question - "was this one port scanned?" - that a
+# wide range does not usefully narrow anyway.
+MAX_REQUESTED_PORT_SPAN: Final = 4096
+
 # Field caps mirror the contract's max_length so a long banner is truncated here
 # rather than failing validation after the whole file has been parsed.
 _SERVICE_MAX: Final = 64
@@ -195,4 +200,43 @@ def parse_nmap_xml(content: str) -> NormalizedScan:
         scanner_version=_clip(root.get("version"), _SCANNER_MAX),
         started_at=_parse_started_at(root.get("start")),
         hosts=hosts,
+        ports_requested=_parse_requested_ports(root),
     )
+
+
+def _parse_requested_ports(root: Element) -> list[int]:
+    """Which ports the scan was asked to examine, from ``<scaninfo services>``.
+
+    Needed by verification, and *only* recoverable from here. The ports under
+    ``<host>`` are the ones found open, so a port that was scanned and found closed
+    looks exactly like one that was never scanned - which is the difference between
+    "this exposure is gone" and "we did not look".
+
+    Bounded: `services` can legitimately be "1-65535", and expanding that per scan
+    would be a 65k-element list on every upload for no benefit, so ranges wider than
+    the cap are recorded as the endpoints only and treated as unstated.
+    """
+    ports: set[int] = set()
+    for element in root.findall("scaninfo"):
+        services = element.get("services")
+        if not services:
+            continue
+        for part in services.split(","):
+            chunk = part.strip()
+            if not chunk:
+                continue
+            try:
+                if "-" in chunk:
+                    low_text, _, high_text = chunk.partition("-")
+                    low, high = int(low_text), int(high_text)
+                    if low > high or (high - low) > MAX_REQUESTED_PORT_SPAN:
+                        continue
+                    ports.update(range(max(low, 1), min(high, 65535) + 1))
+                else:
+                    ports.add(int(chunk))
+            except ValueError:
+                # Untrusted attribute. An unreadable range is simply not recorded,
+                # which leaves verification unable to conclude - the safe direction.
+                continue
+
+    return sorted(port for port in ports if 1 <= port <= 65535)

@@ -54,8 +54,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
       REDIS_URL: redis://redis:6379/0
       AI_ENGINE_URL: http://ai-engine:8003
+      AI_ENGINE_TIMEOUT_SECONDS: ${AI_ENGINE_TIMEOUT_SECONDS:-300}
       MCP_SERVER_URL: http://mcpserver:8004
       CORS_ORIGINS: '["http://localhost:3000"]'
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -93,6 +95,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cyberagents}:${POSTGRES_PASSWORD:-cyberagents}@db:5432/${POSTGRES_DB:-cyberagents}
       REDIS_URL: redis://redis:6379/0
       AI_ENGINE_URL: http://ai-engine:8003
+      AI_ENGINE_TIMEOUT_SECONDS: ${AI_ENGINE_TIMEOUT_SECONDS:-300}
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -129,8 +133,19 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       BACKEND_URL: http://backend:8000
+      # Agent tools are executed by the MCP server. The path matters: the MCP app
+      # is mounted at /mcp, and the Host header must be one mcpserver allows or
+      # the transport answers 421.
+      MCP_SERVER_URL: http://mcpserver:8004/mcp
+      MCP_TIMEOUT_SECONDS: ${MCP_TIMEOUT_SECONDS:-180}
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
     ports:
       - "8003:8003"
+    depends_on:
+      # Tools are unavailable until mcpserver is up. Agents degrade rather than
+      # fail without it, so this orders startup, it is not a hard requirement.
+      mcpserver:
+        condition: service_started
     healthcheck:
       test:
         - CMD
@@ -168,6 +183,13 @@ services:
       start_period: 15s
 
   # ------------------------------------------------------------ mcpserver --
+  # Executes the agents' tools: nmap, CVE enrichment, exposure classification.
+  # Tool execution lives here rather than in the ai.engine so there is one place
+  # that runs a scanner, one target allowlist, and one audit point.
+  #
+  # Its build context is this directory, not the repo root: it has no path
+  # dependency on cyber.contracts, and duplicating the two internal-key constants
+  # is cheaper than making its image depend on the whole tree.
   mcpserver:
     build:
       context: ./cyber.mcp.server
@@ -177,10 +199,18 @@ services:
       - path: .env
         required: false
     environment:
+      APP_ENV: ${APP_ENV:-local}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8004"
       BACKEND_URL: http://backend:8000
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
+      # Set explicitly rather than left to the fallback: other containers reach
+      # this service as "mcpserver:8004", and a Host the transport does not
+      # recognise is answered with 421 Misdirected Request, not a clear error.
+      MCP_ALLOWED_HOSTS: '["mcpserver","mcpserver:8004","localhost","localhost:8004","127.0.0.1","127.0.0.1:8004"]'
+      SCAN_ALLOWED_TARGETS: ${SCAN_ALLOWED_TARGETS:-["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","::1/128","fc00::/7"]}
+      SCAN_TIMEOUT_SECONDS: ${SCAN_TIMEOUT_SECONDS:-120}
     ports:
       - "8004:8004"
     depends_on:

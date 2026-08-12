@@ -1,23 +1,38 @@
-"""What this server is allowed to scan.
+"""What this server is allowed to reach, for two opposite reasons.
 
-A tool that runs nmap against a caller-supplied string is a scanning proxy. Left
-open it would let anyone who can reach the MCP port scan the internet from this
-host's address, and "the agent asked me to" is not authorisation. So the target
-is checked against an explicit allowlist before any scanner starts, and the
-default allowlist is the private address space only.
+This module holds **two policies that are exact inverses**, and they sit together so the
+next person to touch either can see that the difference is deliberate:
 
-Two deliberate refusals:
+``check_target`` - **scanning.** A tool that runs nmap against a caller-supplied string is
+a scanning proxy. Left open it would let anyone who can reach the MCP port scan the
+internet from this host's address, and "the agent asked me to" is not authorisation. So
+only private, explicitly allowlisted addresses are permitted, and public ones are refused.
 
-* **No DNS resolution.** Resolving a hostname to decide whether it is in scope
-  hands the decision to whoever controls the DNS answer, and the answer can
-  change between the check and the scan. A hostname is only allowed when it is
-  explicitly listed, never because it currently resolves somewhere permitted.
-* **No partial credit.** An unparseable target is refused, not scanned.
+``check_fetch_target`` - **phishing link inspection.** Here the danger runs the other way.
+The URL comes from a hostile email, so the risk is that it points *inward*: at loopback, at
+a private service, at the cloud metadata endpoint. So only public addresses are permitted,
+and private ones are refused.
+
+Both default to refusing. They disagree about which direction is dangerous because they
+are protecting against different things - one protects the internet from this host, the
+other protects this host from the internet.
+
+They also differ on DNS, and that is deliberate too:
+
+* Scanning does **not** resolve. Resolving a hostname to decide scope hands the decision
+  to whoever controls the DNS answer, and the answer can change between the check and the
+  scan. A hostname is allowed only when explicitly listed.
+* Fetching **must** resolve, because a hostile URL is a hostname whose address is the whole
+  question. So it resolves and checks every address returned, on every redirect hop. The
+  residual gap - the address can change between the check and the connection - is named in
+  ``fetch.py``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import socket
 from dataclasses import dataclass
 from typing import Final
 from urllib.parse import urlparse
@@ -107,3 +122,157 @@ def check_target(raw: str, allowed: list[Network]) -> TargetDecision:
         f"{address} is outside the configured scan allowlist. Set "
         "SCAN_ALLOWED_TARGETS to include it if this host is in scope for testing.",
     )
+
+
+# ---------------------------------------------------------------------------
+# The inverse policy: fetching a link out of a hostile message.
+# ---------------------------------------------------------------------------
+
+FETCHABLE_SCHEMES: Final = frozenset({"http", "https"})
+
+
+@dataclass(frozen=True, slots=True)
+class FetchDecision:
+    """Whether a URL may be fetched, and which addresses were vetted."""
+
+    allowed: bool
+    host: str
+    addresses: tuple[str, ...] = ()
+    reason: str = ""
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "allowed": self.allowed,
+            "host": self.host,
+            "addresses": list(self.addresses),
+            "reason": self.reason,
+        }
+
+
+def _is_forbidden_for_fetch(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> str:
+    """Why this address must not be fetched, or "" if it may be.
+
+    Every category here is somewhere a phishing URL should never be able to send us.
+    ``169.254.0.0/16`` is covered by ``is_link_local`` and is the important one: it holds
+    the cloud instance-metadata endpoint, and a fetch that reaches it can read this
+    host's own credentials.
+    """
+    if address.is_unspecified:
+        return "the unspecified address"
+    if address.is_loopback:
+        return "a loopback address"
+    if address.is_link_local:
+        return "a link-local address (this range holds the cloud metadata endpoint)"
+    if address.is_private:
+        return "a private address"
+    if address.is_reserved:
+        return "a reserved address"
+    if address.is_multicast:
+        return "a multicast address"
+
+    # No explicit unwrapping of IPv4-mapped (::ffff:10.0.0.5) or 6to4 (2002::/16)
+    # addresses, because the checks above already cover them. Verified against Python
+    # 3.12's ipaddress rather than assumed - it evaluates the embedded v4 address, so
+    # ::ffff:10.0.0.5 reports is_private, ::ffff:169.254.169.254 reports is_link_local,
+    # and the whole 2002::/16 range reports is_private regardless of what it wraps.
+    #
+    # Unwrapping by hand was written here first and deleted as unreachable. The tests
+    # still assert that these forms are refused, so if a future Python narrows those
+    # properties the gap shows up as a failure rather than as a silent bypass.
+    return ""
+
+
+async def _resolve(host: str) -> list[str]:
+    """Every address ``host`` currently resolves to.
+
+    Uses the loop's executor rather than blocking it. An IP literal short-circuits, so a
+    caller passing one does not pay for a resolver round trip.
+    """
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        pass
+    else:
+        return [host.strip("[]")]
+
+    loop = asyncio.get_running_loop()
+    infos = await loop.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    # dict.fromkeys rather than set(), so the order is stable and the log reads the same
+    # way twice for the same host.
+    return list(dict.fromkeys(str(info[4][0]) for info in infos))
+
+
+async def check_fetch_target(raw: str) -> FetchDecision:
+    """Decide whether ``raw`` may be fetched, resolving it first.
+
+    Refuses unless **every** address the host resolves to is public. All of them, not the
+    first: a hostname that returns one public and one loopback address would otherwise be
+    fetchable, and which one the client connects to is not ours to predict.
+
+    Args:
+        raw: An absolute http or https URL.
+
+    Returns:
+        A ``FetchDecision``. When allowed, ``addresses`` holds the vetted addresses.
+    """
+    candidate = (raw or "").strip()
+    if not candidate:
+        return FetchDecision(False, "", reason="No URL was supplied.")
+
+    try:
+        parts = urlparse(candidate)
+    except ValueError as err:
+        return FetchDecision(False, "", reason=f"The URL could not be parsed: {err}")
+
+    scheme = (parts.scheme or "").lower()
+    if scheme not in FETCHABLE_SCHEMES:
+        listed = ", ".join(sorted(FETCHABLE_SCHEMES))
+        return FetchDecision(
+            False,
+            "",
+            reason=f"Only {listed} URLs can be fetched, not {scheme or 'a relative URL'}.",
+        )
+
+    try:
+        host = parts.hostname
+    except ValueError as err:
+        return FetchDecision(False, "", reason=f"The URL has an unusable host: {err}")
+    if not host:
+        return FetchDecision(False, "", reason="The URL has no host.")
+
+    lowered = host.lower()
+    # Refused before resolution: these names are local by definition, and asking a
+    # resolver about them only invites a surprising answer.
+    if lowered in _LOCAL_HOSTNAMES or lowered.endswith(_LOCAL_SUFFIXES):
+        return FetchDecision(
+            False, host, reason=f"{host} names this machine or a local network."
+        )
+
+    try:
+        addresses = await _resolve(host)
+    except OSError as err:
+        return FetchDecision(False, host, reason=f"{host} did not resolve: {err}")
+
+    if not addresses:
+        return FetchDecision(False, host, reason=f"{host} resolved to no addresses.")
+
+    for raw_address in addresses:
+        try:
+            address = ipaddress.ip_address(raw_address)
+        except ValueError:
+            return FetchDecision(
+                False, host, reason=f"{host} resolved to an unreadable address {raw_address!r}."
+            )
+        forbidden = _is_forbidden_for_fetch(address)
+        if forbidden:
+            return FetchDecision(
+                False,
+                host,
+                addresses=tuple(addresses),
+                reason=(
+                    f"{host} resolves to {raw_address}, which is {forbidden}. Fetching it "
+                    f"would point this server at its own network."
+                ),
+            )
+
+    return FetchDecision(True, host, addresses=tuple(addresses))

@@ -57,6 +57,13 @@ class FindingType(StrEnum):
 
     Orthogonal to severity: a risky exposed service can be anything from info to
     critical depending on where it sits.
+
+    Deliberately coarse. Phishing detection produces a dozen distinct *indicator*
+    categories - display-name spoofing, lookalike domain, dangerous attachment -
+    but those are evidence for one analyst decision about one message, so they
+    live in ``evidence`` rather than each earning an enum member. Every value
+    added here has to be added to a CHECK constraint in a migration, which is a
+    good reason to keep the list short.
     """
 
     outdated_service = "outdated_service"
@@ -64,6 +71,8 @@ class FindingType(StrEnum):
     known_cve = "known_cve"
     weak_configuration = "weak_configuration"
     prompt_injection_attempt = "prompt_injection_attempt"
+    phishing_message = "phishing_message"
+    malicious_url = "malicious_url"
     informational = "informational"
 
 
@@ -131,13 +140,18 @@ class FindingCreate(BaseModel):
     scan_id: UUID | None = Field(
         default=None, description="The scan intake record this came from, when there was one."
     )
+    message_id: UUID | None = Field(
+        default=None,
+        description="The message intake record this came from, when there was one. "
+        "Our own row id, not the RFC 5322 Message-ID header.",
+    )
     run_id: UUID | None = Field(
         default=None, description="The pipeline run this finding came from, when there was one."
     )
     raw_reference: str | None = Field(
         default=None,
         max_length=512,
-        description="Pointer back to the ingested artifact, e.g. scan://<uuid>.",
+        description="Pointer back to the ingested artifact, e.g. scan://<uuid> or message://<uuid>.",
     )
     detected_at: datetime = Field(description="When the underlying activity was observed (UTC).")
 

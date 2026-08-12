@@ -19,7 +19,9 @@ from arq.cron import CronJob
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine
+from app.tasks.message_tasks import analyze_message
 from app.tasks.scan_tasks import agent_run, analyze_scan, ping
+from app.tasks.verification_tasks import recheck_findings
 
 logger = get_logger(__name__)
 
@@ -39,10 +41,15 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 class WorkerSettings:
     """arq configuration. Scheduled jobs are deferred to a later phase."""
 
+    # Every task must be listed here. arq does not discover them, and an
+    # unregistered task is enqueued successfully and then never runs - so the row
+    # sits at `pending` forever with nothing in the logs to say why.
     functions: ClassVar[list[Callable[..., Coroutine[Any, Any, Any]]]] = [
         ping,
         agent_run,
         analyze_scan,
+        recheck_findings,
+        analyze_message,
     ]
     cron_jobs: ClassVar[list[CronJob]] = []
     redis_settings: RedisSettings = RedisSettings.from_dsn(get_settings().redis_url)

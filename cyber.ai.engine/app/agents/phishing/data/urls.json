@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "URL knowledge: link shorteners, and the ports a normal web link uses.",
+    "",
+    "A shortener is not malicious - it is *opaque*, which is the point. A recipient",
+    "cannot see where it goes, and neither can a rule, so the finding is 'the",
+    "destination is hidden', not 'the destination is bad'. Weighted accordingly, and it",
+    "is one of the few indicators the optional fetch can actually resolve.",
+    "",
+    "`open_redirect_hosts` are legitimate domains with well-known redirect endpoints.",
+    "A link to one of these looks reassuring in a mail client while landing anywhere,",
+    "which is precisely why it is worth flagging."
+  ],
+  "shorteners": [
+    "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd", "buff.ly", "rebrand.ly",
+    "cutt.ly", "bl.ink", "shorturl.at", "rb.gy", "tiny.cc", "lnkd.in", "trib.al",
+    "shorte.st", "adf.ly", "bc.vc", "s.id", "clck.ru", "u.to", "v.gd", "x.co",
+    "qr.ae", "soo.gd", "1url.com", "hyperurl.co", "tr.im", "cli.gs", "short.io",
+    "t.ly", "shrtco.de", "gg.gg", "urlz.fr", "ur1.ca", "vurl.com", "zpr.io"
+  ],
+  "open_redirect_hosts": [
+    "google.com", "youtube.com", "facebook.com", "l.facebook.com", "linkedin.com",
+    "t.umblr.com", "out.reddit.com", "steamcommunity.com", "vk.com", "baidu.com"
+  ],
+  "standard_ports": [80, 443, 8080, 8443],
+  "max_subdomain_labels": 4
+}

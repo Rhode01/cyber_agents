@@ -8,6 +8,8 @@ module only adds the read model that maps out of the ORM.
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from cyber_contracts import (
     AgentKind,
     Finding,
@@ -17,7 +19,7 @@ from cyber_contracts import (
     FindingType,
     Severity,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Re-exported so the rest of the backend imports one consistent surface.
 FindingBatchCreate = FindingBatch
@@ -31,6 +33,8 @@ __all__ = [
     "FindingStatus",
     "FindingStatusUpdate",
     "FindingType",
+    "FindingVerifyRequest",
+    "FindingVerifyResponse",
     "Severity",
 ]
 
@@ -62,3 +66,40 @@ class FindingStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: FindingStatus
+
+
+class FindingVerifyRequest(BaseModel):
+    """Ask the platform to re-check findings after a fix.
+
+    Either specific findings or every open finding on one asset. Requiring one of
+    the two is deliberate: a re-check launches a scan, so there is no "verify
+    everything" default that could sweep the estate by accident.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_ids: list[UUID] = Field(
+        default_factory=list, max_length=200, description="Specific findings to re-check."
+    )
+    asset: str | None = Field(
+        default=None, max_length=512, description="Re-check every open finding on this asset."
+    )
+
+    @model_validator(mode="after")
+    def _require_a_scope(self) -> FindingVerifyRequest:
+        if not self.finding_ids and not self.asset:
+            msg = "Provide finding_ids or asset: a re-check needs a scope."
+            raise ValueError(msg)
+        return self
+
+
+class FindingVerifyResponse(BaseModel):
+    """Acknowledgement that a re-check has been queued."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    queued: int = Field(ge=0, description="How many open findings will be re-checked.")
+    job_id: str | None = Field(
+        default=None, description="The arq job, or null when the queue deduplicated it."
+    )
+    detail: str = Field(description="What will happen, in one line for the UI.")

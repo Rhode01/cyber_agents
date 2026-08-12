@@ -14,11 +14,14 @@ from cyber_contracts import DiscoveryReport
 from fastapi import APIRouter
 
 from app.core.logging import get_logger
+from app.core.security import InternalKeyGuard
 from app.discovery.tools import run_discovery
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/discovery", tags=["discovery"])
+router = APIRouter(
+    prefix="/discovery", tags=["discovery"], dependencies=[InternalKeyGuard]
+)
 
 
 @router.post(

@@ -10,6 +10,7 @@ const NAV = [
   { href: '/', label: 'Home' },
   { href: '/run', label: 'Run Agent' },
   { href: '/scans', label: 'Scans' },
+  { href: '/phishing', label: 'Phishing' },
   { href: '/services', label: 'Services' },
   { href: '/findings', label: 'Findings' },
   { href: '/reports', label: 'Reports' },

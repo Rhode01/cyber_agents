@@ -1,0 +1,17 @@
+Received: from mail.rechnung.example (203.0.113.9) by mx.corp.example; Sat, 08 Aug 2026 08:30:00 +0000
+Authentication-Results: mx.corp.example; spf=softfail; dkim=none; dmarc=fail
+Message-ID: <rechnung-9912@rechnung.example>
+Date: Sat, 08 Aug 2026 08:29:58 +0000
+From: Rechnungsstelle <buchhaltung@rechnung.example>
+To: analyst@corp.example
+Subject: Zahlungsrückstand - sofortige Überprüfung erforderlich
+MIME-Version: 1.0
+Content-Type: text/plain
+Content-Transfer-Encoding: 8bit
+
+Sehr geehrte Damen und Herren,
+
+Ihre Rechnung ist überfällig. Bitte begleichen Sie den Betrag von 1.240,00 ?
+innerhalb von 48 Stunden: http://rechnung-portal.example/zahlung?id=9912
+
+Mit freundlichen Grüßen

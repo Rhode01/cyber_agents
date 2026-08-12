@@ -237,8 +237,8 @@ files = [
 markers = {main = "platform_system == \"Windows\"", dev = "sys_platform == \"win32\""}
 
 [[package]]
-name = "cyberagents-contracts"
-version = "0.2.0"
+name = "cyber-contracts"
+version = "0.6.0"
 description = "Shared service-to-service contract between backend and ai.engine."
 optional = false
 python-versions = ">=3.12,<4.0"
@@ -251,7 +251,7 @@ pydantic = ">=2.13.4,<3.0.0"
 
 [package.source]
 type = "directory"
-url = "../contracts"
+url = "../cyber.contracts"
 
 [[package]]
 name = "defusedxml"
@@ -1908,4 +1908,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "30f73c64dd5ca3ab4e45eb62c6e509e46dca31256b3624147311b36d75857fbc"
+content-hash = "47c7115e4d1fa99ff0181f09e9d04c24e8d6297c2d41b53ecf86358e263bc55a"

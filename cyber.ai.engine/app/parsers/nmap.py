@@ -172,6 +172,58 @@ _NORMAL_HOST_RE = re.compile(r"Nmap scan report for (.+)")
 _NORMAL_PORT_RE = re.compile(
     r"^(\d+)/(tcp|udp)\s+(open|closed|filtered\S*)\s+(\S+)\s*(.*)", re.MULTILINE
 )
+_VERSION_START_RE = re.compile(r"^\d")
+
+
+def _split_trailing_parens(text: str) -> tuple[str, str]:
+    """Split ``"Apache httpd 2.4.41 ((Ubuntu))"`` into body and parenthesised extra.
+
+    Nmap's normal output puts extra-info in a trailing parenthesised group, which
+    may itself contain parentheses. Scanned from the right with a depth counter
+    rather than by regex, because ``\\(.*\\)$`` mis-splits ``"((Ubuntu))"``.
+    """
+    stripped = text.rstrip()
+    if not stripped.endswith(")"):
+        return stripped, ""
+
+    depth = 0
+    for index in range(len(stripped) - 1, -1, -1):
+        char = stripped[index]
+        if char == ")":
+            depth += 1
+        elif char == "(":
+            depth -= 1
+            if depth == 0:
+                return stripped[:index].rstrip(), stripped[index + 1 : -1].strip()
+    return stripped, ""
+
+
+def _split_normal_banner(banner: str) -> tuple[str, str, str]:
+    """Split a normal-output service banner into product, version and extra-info.
+
+    Normal output renders the same three fields the XML format carries as
+    attributes, just concatenated: ``product version (extrainfo)``. Recovering
+    them matters because every version-comparison rule reads ``version``, and a
+    parser that leaves it empty turns the whole rule engine into a no-op while
+    still looking like it parsed successfully.
+
+    The version is taken to start at the first whitespace-delimited token
+    beginning with a digit, and runs to the end - so ``"OpenSSH 7.4p1 Debian
+    10+deb9u7"`` yields version ``"7.4p1 Debian 10+deb9u7"``, matching what the
+    XML attribute would have held for the same service.
+    """
+    body, extra_info = _split_trailing_parens(banner.strip())
+    if not body:
+        return "", "", extra_info
+
+    tokens = body.split()
+    for index, token in enumerate(tokens):
+        if _VERSION_START_RE.match(token):
+            return " ".join(tokens[:index]), " ".join(tokens[index:]), extra_info
+
+    # No numeric token at all: it is all product name, e.g. "Postfix smtpd".
+    return body, "", extra_info
+
 
 def _parse_normal(raw: str) -> list[NmapHost]:
     hosts: list[NmapHost] = []
@@ -190,9 +242,10 @@ def _parse_normal(raw: str) -> list[NmapHost]:
         services: list[NmapService] = []
         for pm in _NORMAL_PORT_RE.finditer(block_text):
             port, proto, state, svc, banner = pm.groups()
+            product, version, extra_info = _split_normal_banner(banner)
             services.append(NmapService(
                 port=int(port), protocol=proto, state=state,
-                service=svc, product="", version="", extra_info=banner.strip(),
+                service=svc, product=product, version=version, extra_info=extra_info,
             ))
 
         hosts.append(NmapHost(ip=ip, hostname=hostname, state="up", os_guess="", services=services))

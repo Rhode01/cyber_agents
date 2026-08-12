@@ -19,7 +19,13 @@ from app.api.deps import SessionDep, SettingsDep
 
 router = APIRouter(prefix="/system", tags=["system"])
 
-_MODULE_TIMEOUT_SECONDS = 3.0
+# Generous on purpose. The four checks run concurrently, and the first database
+# connection after a restart opens a fresh pool - measured at ~3.9s against a local
+# PostgreSQL. At 3s that cold start pushed the *Redis* check past its own deadline,
+# so the dashboard's first load after every restart reported Redis down while the
+# worker was happily connected to it. A slow check has to read as slow, not as an
+# outage: a health panel that cries wolf on startup is one operators learn to ignore.
+_MODULE_TIMEOUT_SECONDS = 10.0
 
 
 def _host_of(url: str) -> str:
@@ -37,6 +43,24 @@ def _host_of(url: str) -> str:
     if not parts.hostname:
         return "(unknown)"
     return f"{parts.hostname}:{parts.port}" if parts.port else parts.hostname
+
+
+def _mcp_base(url: str) -> str:
+    """The MCP server's root, given a URL that may point at its ``/mcp`` endpoint.
+
+    ``MCP_SERVER_URL`` has two consumers with different needs from one value. The
+    ai.engine must address the Streamable HTTP endpoint itself, so its URL ends in
+    ``/mcp``; this health probe needs the root so it can append ``/health``, which
+    is the only path the MCP server leaves unauthenticated.
+
+    Under Compose each service gets its own env block and both forms coexist. In a
+    single shared ``.env`` they cannot, and appending ``/health`` to the agent's URL
+    produced ``/mcp/health`` - a 404 that rendered as "mcpserver down" on the
+    dashboard while the server was running perfectly well. Stripping the suffix here
+    means either form works.
+    """
+    trimmed = url.rstrip("/")
+    return trimmed[: -len("/mcp")] if trimmed.endswith("/mcp") else trimmed
 
 
 class ModuleStatus(BaseModel):
@@ -104,7 +128,9 @@ async def system_modules(session: SessionDep, settings: SettingsDep) -> SystemMo
             "ai.engine", _host_of(settings.ai_engine_url), f"{settings.ai_engine_url}/health"
         ),
         _check_http(
-            "mcpserver", _host_of(settings.mcp_server_url), f"{settings.mcp_server_url}/health"
+            "mcpserver",
+            _host_of(settings.mcp_server_url),
+            f"{_mcp_base(settings.mcp_server_url)}/health",
         ),
     )
     return SystemModules(items=list(results))

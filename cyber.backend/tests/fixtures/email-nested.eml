@@ -1,0 +1,410 @@
+Received: from mail.bulk.example (198.51.100.77) by mx.corp.example; Fri, 07 Aug 2026 21:00:00 +0000
+Message-ID: <nested-many-parts@bulk.example>
+Date: Fri, 07 Aug 2026 20:59:58 +0000
+From: Bulk Sender <bulk@bulk.example>
+To: analyst@corp.example
+Subject: Many parts
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="deep_9001"
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 0
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 1
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 2
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 3
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 4
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 5
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 6
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 7
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 8
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 9
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 10
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 11
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 12
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 13
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 14
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 15
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 16
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 17
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 18
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 19
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 20
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 21
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 22
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 23
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 24
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 25
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 26
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 27
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 28
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 29
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 30
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 31
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 32
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 33
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 34
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 35
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 36
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 37
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 38
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 39
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 40
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 41
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 42
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 43
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 44
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 45
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 46
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 47
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 48
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 49
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 50
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 51
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 52
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 53
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 54
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 55
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 56
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 57
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 58
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 59
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 60
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 61
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 62
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 63
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 64
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 65
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 66
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 67
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 68
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 69
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 70
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 71
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 72
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 73
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 74
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 75
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 76
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 77
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 78
+
+--deep_9001
+Content-Type: text/plain; charset="utf-8"
+
+part number 79
+
+--deep_9001--

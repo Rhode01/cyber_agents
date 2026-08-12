@@ -19,7 +19,7 @@ from typing import Any
 from cyber_contracts import AgentKind, FindingCreate, FindingType, Severity
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from app.agents.common.findings import resolve_finding_type
+from app.agents.common.findings import resolve_finding_type, resolve_severity
 from app.agents.common.placeholder import placeholder_finding
 from app.agents.common.untrusted import wrap_untrusted
 from app.agents.network.prompt import SYSTEM_PROMPT
@@ -34,15 +34,6 @@ from app.llm.factory import (
 from app.parsers import ParseError, suricata, zeek
 
 logger = get_logger(__name__)
-
-_SEVERITY_MAP: dict[str, Severity] = {
-    "critical": Severity.critical,
-    "high": Severity.high,
-    "medium": Severity.medium,
-    "low": Severity.low,
-    "info": Severity.info,
-}
-
 
 # ---------------------------------------------------------------------------
 # scan
@@ -328,7 +319,7 @@ async def emit_findings(state: NetworkState) -> dict[str, Any]:
     if raw_findings:
         for raw in raw_findings:
             sev_str = str(raw.get("severity", "info")).lower()
-            severity = _SEVERITY_MAP.get(sev_str, Severity.info)
+            severity = resolve_severity(sev_str, default=Severity.info)
             confidence = float(raw.get("confidence", 0.8))
 
             findings.append(FindingCreate(

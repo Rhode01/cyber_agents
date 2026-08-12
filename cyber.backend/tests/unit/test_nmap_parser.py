@@ -108,7 +108,9 @@ def test_injected_content_survives_byte_for_byte() -> None:
     assert "UNTRUSTED_VULNERABILITY_SCAN_CANDIDATES_END" in ssh.extrainfo
 
     # A homoglyph hostname (Cyrillic U+0430) is preserved, not normalised away.
-    assert "а" in host.hostnames[0]
+    # The ambiguous character is the whole point of the assertion, so RUF001 is
+    # silenced here rather than the test being weakened to a Latin "a".
+    assert "а" in host.hostnames[0]  # noqa: RUF001
 
     # A bidi override (U+202E) planted in a banner also survives.
     ftp = next(p for p in host.ports if p.port == 21)
@@ -169,7 +171,8 @@ def test_too_many_hosts_is_refused_rather_than_truncated() -> None:
     """Exceeding a bound must fail loudly: a silently truncated host list would
     read as "the rest of the network is clean"."""
     hosts = "".join(
-        f'<host><status state="up"/><address addr="10.0.{i // 256}.{i % 256}" addrtype="ipv4"/></host>'
+        '<host><status state="up"/>'
+        f'<address addr="10.0.{i // 256}.{i % 256}" addrtype="ipv4"/></host>'
         for i in range(MAX_HOSTS + 1)
     )
     with pytest.raises(ScanParseError) as err:

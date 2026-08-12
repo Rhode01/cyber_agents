@@ -29,11 +29,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_sessionmaker
-from app.services.ingestion import ScanParseError, parse
+from app.models.run import Run
 from app.models.scan import Scan
 from app.schemas.agents import AgentRunRequest
+from app.schemas.run import AgentStatusSnapshot
 from app.services.ai_engine.client import AiEngineClient, AiEngineError
+from app.services.ingestion import ScanParseError, parse
 from app.services.orchestration import persist_findings, run_agent
+from app.services.verification import verify_from_scan
 
 logger = get_logger(__name__)
 
@@ -74,7 +77,16 @@ async def agent_run(ctx: dict[str, Any], agent: str, payload: dict[str, Any]) ->
     client = AiEngineClient()
     try:
         async with factory() as session:
+            await _record_agent_status(
+                session, request.run_id, agent, AgentStatusSnapshot(state="running")
+            )
             rows = await run_agent(session, client, agent_kind, request)
+            await _record_agent_status(
+                session,
+                request.run_id,
+                agent,
+                AgentStatusSnapshot(state="done", count=len(rows), job_id=job_id),
+            )
     except AiEngineError as err:
         # Surfaced through the job result rather than swallowed: arq keeps it, and
         # re-raising would retry a call that already failed after its own retries.
@@ -82,12 +94,51 @@ async def agent_run(ctx: dict[str, Any], agent: str, payload: dict[str, Any]) ->
         if err.status_code is not None:
             detail = f"{detail} (upstream status {err.status_code})"
         logger.warning("worker.agent_run.failed", job_id=job_id, agent=agent, error=detail)
+        async with factory() as session:
+            await _record_agent_status(
+                session,
+                request.run_id,
+                agent,
+                AgentStatusSnapshot(state="error", error=detail, job_id=job_id),
+            )
         return {"agent": agent, "status": "failed", "error": detail, "findings": 0}
     finally:
         await client.aclose()
 
     logger.info("worker.agent_run.done", job_id=job_id, agent=agent, findings=len(rows))
     return {"agent": agent, "status": "completed", "findings": len(rows)}
+
+
+async def _record_agent_status(
+    session: AsyncSession, run_id: UUID | None, agent: str, status: AgentStatusSnapshot
+) -> None:
+    """Write one agent's state onto its run, if the request named one.
+
+    Background runs were previously invisible server-side: only the browser wrote
+    ``runs.agent_statuses``, so a queued run that the operator navigated away from
+    left no record of having been attempted at all. No migration is needed -
+    ``agent_statuses`` is already JSONB.
+
+    Typed as ``AgentStatusSnapshot`` rather than a bare dict because this is the
+    second writer of that column and the first is a browser. When they were both
+    writing free-form JSON they drifted, and the UI rendered an unknown state with
+    an undefined count.
+    """
+    if run_id is None:
+        return
+
+    run = await session.get(Run, run_id)
+    if run is None:
+        logger.warning("worker.agent_run.run_missing", run_id=str(run_id), agent=agent)
+        return
+
+    # Reassigned rather than mutated in place: SQLAlchemy does not track mutations
+    # inside a plain JSONB dict, so an in-place update would never be persisted.
+    run.agent_statuses = {
+        **(run.agent_statuses or {}),
+        agent: status.model_dump(mode="json", exclude_none=True),
+    }
+    await session.commit()
 
 
 async def _fail(session: AsyncSession, scan: Scan, reason: str) -> dict[str, Any]:
@@ -154,7 +205,7 @@ async def analyze_scan(ctx: dict[str, Any], scan_id: str) -> dict[str, Any]:
 
         client = AiEngineClient()
         try:
-            batch = await client.analyze_vulnerability(request)
+            batch = await client.assess_vulnerability(request)
         except AiEngineError as err:
             detail = f"The ai.engine could not assess this scan: {err}"
             if err.status_code is not None:
@@ -178,11 +229,26 @@ async def analyze_scan(ctx: dict[str, Any], scan_id: str) -> dict[str, Any]:
         scan.error = None
         await session.commit()
 
-        logger.info("scan.analyze.done", scan_id=scan_id, findings=len(rows))
+        # ---- verify --------------------------------------------------------
+        # No second scan: the backend parsed this artifact, so it already holds
+        # provable coverage - which hosts were up, and which ports each reported.
+        # Re-scanning to verify a scan we just read would be slower and no more
+        # truthful.
+        verification = await verify_from_scan(
+            session, normalized=normalized, batch_findings=stamped, source=f"scan://{scan.id}"
+        )
+
+        logger.info(
+            "scan.analyze.done",
+            scan_id=scan_id,
+            findings=len(rows),
+            **verification.counts(),
+        )
         return {
             "scan_id": scan_id,
             "status": ScanStatus.completed.value,
             "findings": len(rows),
+            "verification": verification.counts(),
         }
 
 

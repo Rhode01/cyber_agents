@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
-# Phase 1 acceptance smoke test. Probes every module's health surface.
-# Requires the stack to be running (make up, or the individual make dev-* targets).
+# Acceptance smoke test. Probes every module's health surface.
+# Requires the stack to be running (make up, or the individual make *-dev targets).
+#
+# INTERNAL_KEY is read from the environment (or .env) and sent on every probe: the
+# agent routes and the MCP endpoint require it whenever one is configured, so
+# without it this script would report 401s as failures.
 set -uo pipefail
 
+if [ -z "${INTERNAL_KEY:-}" ] && [ -f .env ]; then
+  INTERNAL_KEY=$(sed -n 's/^INTERNAL_KEY=//p' .env | head -1)
+fi
+
 failures=0
-analyze='{"source":"verify","asset":"example.internal","raw_input":"placeholder"}'
+# A real Nmap banner, not a placeholder: the vulnerability agent now runs a rule
+# engine, and "placeholder" exercises only the unparseable-source path.
+analyze='{"source":"nmap","asset":"10.0.0.5","raw_input":"Nmap scan report for 10.0.0.5\n22/tcp open ssh OpenSSH 7.2 (protocol 2.0)\n"}'
 initialize='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"verify","version":"1"}}}'
 
 probe() {
@@ -14,9 +24,11 @@ probe() {
     code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 -X POST \
       -H 'Content-Type: application/json' \
       -H 'Accept: application/json, text/event-stream' \
+      -H "X-Internal-Key: ${INTERNAL_KEY:-}" \
       -d "$body" "$url" || echo 000)
   else
-    code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "$url" || echo 000)
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 15 \
+      -H "X-Internal-Key: ${INTERNAL_KEY:-}" "$url" || echo 000)
   fi
   if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
     printf 'PASS  %-34s %s %s\n' "$name" "$code" "$url"
@@ -37,6 +49,8 @@ probe 'GET /health' GET http://localhost:8003/health
 for a in vulnerability phishing network webapp; do
   probe "POST /agents/$a/analyze" POST "http://localhost:8003/agents/$a/analyze"
 done
+probe 'POST /agents/vulnerability/assess' POST http://localhost:8003/agents/vulnerability/assess \
+  '{"scan_id":"00000000-0000-0000-0000-000000000000","source":"nmap","asset":"10.0.0.5","scan":{"format":"nmap_xml","scanner":"nmap","hosts":[{"address":"10.0.0.5","status":"up","ports":[{"port":22,"protocol":"tcp","state":"open","service":"ssh","product":"OpenSSH","version":"7.2"}]}]},"context":{}}'
 
 echo
 echo 'frontend (:3000)'

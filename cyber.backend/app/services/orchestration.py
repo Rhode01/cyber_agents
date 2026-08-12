@@ -46,6 +46,7 @@ def to_model(finding: FindingCreate) -> FindingModel:
         recommendation=finding.recommendation,
         status=finding.status.value,
         scan_id=finding.scan_id,
+        message_id=finding.message_id,
         run_id=finding.run_id,
         raw_reference=finding.raw_reference,
         detected_at=finding.detected_at,

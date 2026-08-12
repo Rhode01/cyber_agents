@@ -34,8 +34,8 @@ async def test_run_lifecycle(client: AsyncClient) -> None:
         json={
             "status": "completed",
             "agent_statuses": {
-                "webapp": {"state": "done", "findings": 3},
-                "phishing": {"state": "skipped", "findings": 0},
+                "webapp": {"state": "done", "count": 3},
+                "phishing": {"state": "skipped", "count": 0},
             },
             "discovery": {"subnets": ["10.0.0.0/24"], "live_hosts": ["10.0.0.1"]},
         },
@@ -43,7 +43,9 @@ async def test_run_lifecycle(client: AsyncClient) -> None:
     assert updated.status_code == 200
     body = updated.json()
     assert body["status"] == "completed"
-    assert body["agent_statuses"]["webapp"]["findings"] == 3
+    assert body["agent_statuses"]["webapp"]["count"] == 3
+    # Optional fields stay out of the stored blob when they carry nothing.
+    assert "error" not in body["agent_statuses"]["webapp"]
     assert body["discovery"]["live_hosts"] == ["10.0.0.1"]
     assert body["finished_at"] is not None
 

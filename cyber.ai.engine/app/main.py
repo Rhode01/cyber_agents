@@ -13,10 +13,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import __version__
+from app.api.v1.api import api_router
 from app.core.config import get_settings
+from app.core.http_errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.llm.factory import describe_model
-from app.api.v1.api import api_router
 
 logger = get_logger(__name__)
 
@@ -55,6 +56,12 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router)
+
+    # One registration covers every AssessmentError subclass, so an agent can raise
+    # the failure it means and get the right status code without a try/except in its
+    # router. This is what makes a missing API key arrive at the backend as a 503
+    # with a reason instead of an unhandled 500.
+    register_exception_handlers(app)
 
     return app
 

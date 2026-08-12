@@ -30,21 +30,90 @@ export interface AgentTraceEntry {
   result?: string
 }
 
+/** What kind of problem a finding describes. Orthogonal to severity. */
+export type FindingType =
+  | 'outdated_service'
+  | 'risky_exposed_service'
+  | 'known_cve'
+  | 'weak_configuration'
+  | 'prompt_injection_attempt'
+  | 'informational'
+
+export type FindingStatus = 'new' | 'triaged' | 'resolved' | 'false_positive'
+
+/** One factor's contribution to a finding's remediation priority.
+ *
+ * Computed deterministically by the ai.engine, never by a model, so it can be
+ * shown to an analyst as the reason for a ranking. Lives under
+ * `evidence.priority`. */
+export interface PriorityFactor {
+  value: string
+  points: number
+  max_points: number
+}
+
+export interface FindingPriority {
+  score: number
+  max_score: number
+  rank: number
+  factors: Record<string, PriorityFactor>
+}
+
+/** What one re-check concluded about a finding.
+ *
+ * Only `resolved` closes a finding, and only when the scan provably covered its
+ * host and port. `unverified` means the check could not reach it — an offline
+ * host, a refused target, a port outside the scanned range — and must be shown as
+ * prominently as a resolution, or the loop becomes a source of false confidence.
+ * `unverifiable` means no network scan can ever cover it, e.g. a package finding
+ * with no port. Lives under `evidence.verification` as a list, newest last. */
+export type VerificationOutcome =
+  | 'resolved'
+  | 'still_present'
+  | 'unverified'
+  | 'unverifiable'
+
+export interface VerificationEntry {
+  outcome: VerificationOutcome
+  reason: string
+  verified_at: string
+  recorded_at: string
+  /** `scan://<id>` or `recheck://<job>` — what drove this attempt. */
+  source: string
+}
+
+/** Acknowledgement that a re-check has been queued. */
+export interface FindingVerifyResponse {
+  queued: number
+  job_id: string | null
+  detail: string
+}
+
 export interface Finding {
   id: string
   agent: AgentKind
+  finding_type: FindingType
   title: string
   description: string
   severity: Severity
   confidence: number
   source: string
   asset: string | null
+  /** Service name from a banner. UNTRUSTED - render as text. */
+  service: string | null
+  port: number | null
+  protocol: string | null
+  /** Only ever produced by the rule engine, never by a model. */
+  cve_ids: string[]
   /** Untrusted data captured from a monitored system. Render as text, never as markup. */
   evidence: Record<string, unknown>
   recommendation: string | null
+  status: FindingStatus
   raw_reference: string | null
   /** The pipeline run that produced this finding, when there was one. */
   run_id: string | null
+  /** The uploaded scan that produced this finding, when there was one. */
+  scan_id: string | null
   detected_at: string
   created_at: string
 }

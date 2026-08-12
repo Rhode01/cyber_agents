@@ -6,7 +6,11 @@ Bump ``__version__`` on any field change, then run ``make lock`` so both
 consumers re-resolve the path dependency.
 """
 
-from cyber_contracts.analyze import VulnerabilityAnalyzeRequest
+from cyber_contracts.analyze import (
+    EnrichmentPolicy,
+    PhishingAnalyzeRequest,
+    VulnerabilityAnalyzeRequest,
+)
 from cyber_contracts.discovery import DiscoveryReport, InterfaceInfo, ServicePort, WebHost
 from cyber_contracts.finding import (
     SEVERITY_ORDER,
@@ -18,6 +22,16 @@ from cyber_contracts.finding import (
     FindingType,
     Severity,
 )
+from cyber_contracts.message import (
+    AuthResults,
+    EmailAddress,
+    EmailAttachment,
+    EmailLink,
+    MessageFormat,
+    MessageStatus,
+    MessageVerdict,
+    NormalizedMessage,
+)
 from cyber_contracts.scan import (
     NormalizedScan,
     ScanFormat,
@@ -26,28 +40,48 @@ from cyber_contracts.scan import (
     ScanStatus,
 )
 from cyber_contracts.security import INTERNAL_KEY_HEADER, matches_internal_key
+from cyber_contracts.verification import (
+    HostCoverage,
+    VerificationReport,
+    VerificationRequest,
+    VerificationTarget,
+)
 
 __all__ = [
     "INTERNAL_KEY_HEADER",
     "SEVERITY_ORDER",
     "AgentKind",
+    "AuthResults",
     "DiscoveryReport",
+    "EmailAddress",
+    "EmailAttachment",
+    "EmailLink",
+    "EnrichmentPolicy",
     "Finding",
     "FindingBatch",
     "FindingCreate",
     "FindingStatus",
     "FindingType",
+    "HostCoverage",
     "InterfaceInfo",
+    "MessageFormat",
+    "MessageStatus",
+    "MessageVerdict",
+    "NormalizedMessage",
     "NormalizedScan",
+    "PhishingAnalyzeRequest",
     "ScanFormat",
     "ScanHost",
     "ScanPort",
     "ScanStatus",
     "ServicePort",
     "Severity",
+    "VerificationReport",
+    "VerificationRequest",
+    "VerificationTarget",
     "VulnerabilityAnalyzeRequest",
     "WebHost",
     "matches_internal_key",
 ]
 
-__version__ = "0.6.0"
+__version__ = "0.8.0"

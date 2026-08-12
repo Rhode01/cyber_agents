@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from cyber_contracts import ScanStatus
-from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.elements import ColumnElement, UnaryExpression
 
 from app.crud.crud_base import CRUDBase
 from app.models.scan import Scan
@@ -21,7 +23,7 @@ class CRUDScan(CRUDBase[Scan, ScanRead, ScanRead]):
         return filters
 
     @staticmethod
-    def newest_first() -> ColumnElement[object]:
+    def newest_first() -> UnaryExpression[Any]:
         return Scan.created_at.desc()
 
 

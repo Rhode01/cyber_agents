@@ -11,6 +11,11 @@ dependencies = [
     "pydantic>=2.13.4,<3.0.0",
     "pydantic-settings>=2.14.2,<3.0.0",
     "httpx>=0.28.1,<0.29.0",
+    # TXT and MX lookups for phishing enrichment. The standard library can resolve
+    # A/AAAA records and nothing else, and SPF/DMARC/DKIM all live in TXT.
+    # Imported defensively in app/tools/dnsrecords.py, so the server still starts
+    # without it and that one tool reports itself unavailable.
+    "dnspython>=2.7.0,<3.0.0",
 ]
 
 [tool.poetry]
@@ -36,6 +41,11 @@ ignore = ["S104"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "ANN201"]
+# ANN401: the enrichment tests use fixtures that return installer callables, whose
+# parameter is the scripted response table. Typing those precisely would mean a Protocol
+# per fixture describing a shape only the test uses; `Any` at a test-fixture boundary is
+# the honest annotation.
+"tests/unit/test_enrichment_lookups.py" = ["S101", "ANN201", "ANN401"]
 
 [tool.mypy]
 python_version = "3.12"

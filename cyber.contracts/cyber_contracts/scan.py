@@ -78,6 +78,18 @@ class NormalizedScan(BaseModel):
     scanner_version: str | None = Field(default=None, max_length=64, description="UNTRUSTED.")
     started_at: datetime | None = Field(default=None, description="When the scan ran, if stated.")
     hosts: list[ScanHost] = Field(default_factory=list)
+    ports_requested: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Ports the scanner was asked to examine, from Nmap's <scaninfo services>. "
+            "Distinct from the ports in `hosts`, which are only the ones found OPEN. "
+            "Verification needs the difference: a port that was scanned and found "
+            "closed is absent from the results and indistinguishable from one that "
+            "was never scanned, unless the requested range is recorded separately. "
+            "Empty means the report did not state it, and nothing can be concluded "
+            "from a port's absence."
+        ),
+    )
 
     @property
     def host_count(self) -> int:

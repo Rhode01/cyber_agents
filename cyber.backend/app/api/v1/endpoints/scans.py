@@ -23,10 +23,10 @@ from sqlalchemy import func, select
 from app.api.deps import SessionDep, SettingsDep
 from app.core.logging import get_logger
 from app.core.security import CurrentPrincipal
-from app.services.ingestion import ScanParseError, detect_format
-from app.services.ingestion.registry import PARSERS
 from app.models.scan import MAX_RAW_CONTENT_BYTES, Scan
 from app.schemas.scan import ScanList, ScanRead
+from app.services.ingestion import ScanParseError, detect_format
+from app.services.ingestion.registry import PARSERS
 from app.tasks.scan_tasks import enqueue_scan_analysis
 
 logger = get_logger(__name__)

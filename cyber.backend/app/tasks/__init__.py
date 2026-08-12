@@ -11,11 +11,14 @@ from app.tasks.scan_tasks import (
     enqueue_scan_analysis,
     ping,
 )
+from app.tasks.verification_tasks import enqueue_recheck, recheck_findings
 
 __all__ = [
     "agent_run",
     "analyze_scan",
     "enqueue_agent_run",
+    "enqueue_recheck",
     "enqueue_scan_analysis",
     "ping",
+    "recheck_findings",
 ]

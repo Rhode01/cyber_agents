@@ -144,7 +144,14 @@ async def update_run(
         else:
             row.finished_at = row.finished_at or datetime.now(UTC)
     if payload.agent_statuses is not None:
-        row.agent_statuses = payload.agent_statuses
+        # Dumped to plain JSON rather than assigned: the validated form holds enum
+        # keys and pydantic models, neither of which JSONB can store. `exclude_none`
+        # keeps `error` and `job_id` out of the blob unless they carry something,
+        # matching the optional fields on the frontend's mirror of this shape.
+        row.agent_statuses = {
+            agent.value: snapshot.model_dump(mode="json", exclude_none=True)
+            for agent, snapshot in payload.agent_statuses.items()
+        }
     if payload.discovery is not None:
         row.discovery = payload.discovery
 

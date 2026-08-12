@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # Placeholder only. Real authentication and RBAC are deferred past Phase 1.
     secret_key: str = "change-me-in-every-real-deployment"  # noqa: S105 - obvious placeholder
 
+    # Shared secret for service-to-service calls. Sent outbound to the ai.engine,
+    # and required inbound on the finding-write routes the ai.engine calls back on.
+    # This authenticates a *service*, never a user: browser-facing routes are still
+    # unauthenticated, which is what ``secret_key`` above is reserved for.
+    internal_key: str = ""
+
     @field_validator("database_url")
     @classmethod
     def _require_async_driver(cls, value: str) -> str:
@@ -68,6 +74,18 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def enforce_internal_key(self) -> bool:
+        """Should the service-to-service write routes require the key?
+
+        False only when no key is configured, which is the local-development
+        default. Unlike the ai.engine and MCP server, the backend does not refuse
+        to start without one: it also serves the browser, and a backend that will
+        not boot takes the whole UI with it. The routes that matter are the ones
+        guarded below, and they are not routes a browser calls.
+        """
+        return bool(self.internal_key)
 
 
 @lru_cache
