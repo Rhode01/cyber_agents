@@ -169,6 +169,8 @@ def _parse_grepable(raw: str) -> list[NmapHost]:
 # ---------------------------------------------------------------------------
 
 _NORMAL_HOST_RE = re.compile(r"Nmap scan report for (.+)")
+# "name.example (10.0.0.5)" - hostname first, address in parentheses.
+_NORMAL_HOST_WITH_IP_RE = re.compile(r"^(.*?)\s*\(([0-9a-fA-F.:]+)\)$")
 _NORMAL_PORT_RE = re.compile(
     r"^(\d+)/(tcp|udp)\s+(open|closed|filtered\S*)\s+(\S+)\s*(.*)", re.MULTILINE
 )
@@ -234,10 +236,16 @@ def _parse_normal(raw: str) -> list[NmapHost]:
         host_header = blocks[i].strip()
         block_text = blocks[i + 1] if i + 1 < len(blocks) else ""
 
-        # "host (ip)" or just "ip"
-        ip_m = re.search(r"\(?([\d.:a-fA-F]+)\)?$", host_header)
-        ip = ip_m.group(1) if ip_m else host_header
-        hostname = host_header if ip_m and ip != host_header else ""
+        # Nmap writes either "10.0.0.5" or "name.example (10.0.0.5)". In the second
+        # form the parenthesised address is the IP and the text before it is the
+        # hostname - so the hostname must have the address stripped off it. Keeping
+        # the whole header produced assets like "name.example (10.0.0.5)", which then
+        # matched nothing on a later scan of the same host.
+        paired = _NORMAL_HOST_WITH_IP_RE.match(host_header)
+        if paired:
+            hostname, ip = paired.group(1).strip(), paired.group(2)
+        else:
+            ip, hostname = host_header, ""
 
         services: list[NmapService] = []
         for pm in _NORMAL_PORT_RE.finditer(block_text):

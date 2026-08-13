@@ -1,47 +1,68 @@
 'use client'
 
+import Link from 'next/link'
+import { useState } from 'react'
+
+import { IntakeProgress } from '@/components/intake/IntakeProgress'
+import { IndicatorList } from '@/components/phishing/IndicatorList'
+import { VerdictBadge } from '@/components/phishing/VerdictBadge'
+import { Badge, SeverityBadge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Card, CardBody, CardHeader, Well } from '@/components/ui/Card'
+import { Checkbox, Field, Input } from '@/components/ui/Field'
+import { FileDropzone } from '@/components/ui/FileDropzone'
+import {
+  ArrowRight,
+  Crosshair,
+  Inbox,
+  Link2,
+  Mail,
+  Send,
+} from '@/components/ui/icons'
+import { KeyValueList } from '@/components/ui/KeyValueList'
+import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
+import { EmptyState, InlineError } from '@/components/ui/states'
+import {
+  intakeIsFinished,
+  useIntakeFindings,
+  useMessage,
+  useMessages,
+  useSubmitUrl,
+  useUploadMessage,
+} from '@/lib/queries'
+import { cn } from '@/lib/utils'
+import type { Finding, Indicator, Message } from '@/types'
+
 /**
  * The page that closes the loop: submit a message, watch it analyse, read the verdict.
  *
- * Polling obeys `react-hooks/set-state-in-effect` - `setState` happens only inside
- * promise callbacks, never synchronously in an effect body, with a `cancelled` flag on
- * cleanup. That lint rule already caught this pattern once in this project.
+ * Restyled rather than rewritten — the flow works end to end and the invariants it presents are
+ * the point of the whole agent:
  *
- * Every value taken from a message or a finding is rendered as text. The subject, the
- * sender, the indicator facts and the model's explanation all derive from attacker-
- * authored input, so `dangerouslySetInnerHTML` must not appear anywhere in this file.
+ * **Rules decide, the model explains.** The indicator list is deterministic Python output. The
+ * write-up above it is the model's, and it is allowed to *raise* severity above the rules' floor
+ * but never lower it.
+ *
+ * **An injection attempt is reported, not obeyed.** When a message contains text addressed to
+ * the analyser, that becomes its own finding and the primary assessment still completes.
+ *
+ * **Everything from a message or a finding is rendered as text.** The subject, the sender, the
+ * indicator facts and the model's explanation all derive from attacker-authored input, so
+ * `dangerouslySetInnerHTML` must not appear anywhere in this file.
+ *
+ * Polling and the terminal-status stop now come from `useMessage`, replacing the hand-rolled
+ * interval, attempt counter and cancelled flag this page used to carry.
  */
-
-import { useCallback, useEffect, useRef, useState } from 'react'
-
-import IndicatorList from '@/components/IndicatorList'
-import IntakeProgress from '@/components/IntakeProgress'
-import VerdictBadge from '@/components/VerdictBadge'
-import { SeverityBadge } from '@/components/SeverityBadge'
-import {
-  IntakeError,
-  fetchMessage,
-  fetchMessageFindings,
-  fetchMessages,
-  submitUrl,
-  uploadMessage,
-} from '@/lib/intake'
-import { TERMINAL_STATUSES } from '@/types/intake'
-import type { Indicator, Message } from '@/types/intake'
-import type { Finding, Severity } from '@/types'
-
-const POLL_INTERVAL_MS = 2000
-const MAX_POLL_ATTEMPTS = 60 // ~2 minutes, then stop and say so rather than spin forever
 
 type Mode = 'file' | 'url'
 
 function indicatorsOf(finding: Finding): Indicator[] {
-  const raw = (finding.evidence as Record<string, unknown>)?.indicators
+  const raw = finding.evidence?.indicators
   return Array.isArray(raw) ? (raw as Indicator[]) : []
 }
 
 function verdictOf(finding: Finding): string {
-  const raw = (finding.evidence as Record<string, unknown>)?.verdict
+  const raw = finding.evidence?.verdict
   return typeof raw === 'string' ? raw : ''
 }
 
@@ -50,288 +71,337 @@ export default function PhishingPage() {
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState('')
   const [enrich, setEnrich] = useState(false)
+  const [messageId, setMessageId] = useState<string | null>(null)
 
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<Message | null>(null)
-  const [findings, setFindings] = useState<Finding[] | null>(null)
-  const [timedOut, setTimedOut] = useState(false)
-  const [history, setHistory] = useState<Message[]>([])
+  const upload = useUploadMessage()
+  const submit = useSubmitUrl()
+  const message = useMessage(messageId ?? undefined)
+  const finished = intakeIsFinished(message.data?.status)
+  const findings = useIntakeFindings(messageId ? { messageId } : null, finished)
+  const history = useMessages({ limit: 10 })
 
-  const fileInput = useRef<HTMLInputElement>(null)
+  const submissionError = upload.error ?? submit.error
+  const busy = upload.isPending || submit.isPending
+  const canSubmit = !busy && (mode === 'file' ? file !== null : url.trim().length > 0)
 
-  const loadHistory = useCallback(() => {
-    fetchMessages({ limit: 8 })
-      .then((page) => setHistory(page.items))
-      .catch(() => setHistory([]))
-  }, [])
-
-  useEffect(() => {
-    loadHistory()
-  }, [loadHistory])
-
-  // Poll the intake row until it reaches a terminal status, then load its findings.
-  useEffect(() => {
-    if (message === null) return
-    if (TERMINAL_STATUSES.includes(message.status)) return
-
-    let cancelled = false
-    let attempts = 0
-
-    const tick = () => {
-      fetchMessage(message.id)
-        .then((latest) => {
-          if (cancelled) return
-          setMessage(latest)
-          attempts += 1
-          if (!TERMINAL_STATUSES.includes(latest.status) && attempts >= MAX_POLL_ATTEMPTS) {
-            setTimedOut(true)
-          }
-        })
-        .catch((err: unknown) => {
-          if (cancelled) return
-          setError(err instanceof Error ? err.message : 'Lost contact with the backend')
-        })
-    }
-
-    const timer = setInterval(tick, POLL_INTERVAL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [message])
-
-  // Once analysis finishes, fetch what it produced.
-  useEffect(() => {
-    if (message === null || message.status !== 'completed') return
-
-    let cancelled = false
-    fetchMessageFindings(message.id)
-      .then((page) => {
-        if (!cancelled) setFindings(page.items)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load the findings')
-        }
-      })
-
-    loadHistory()
-    return () => {
-      cancelled = true
-    }
-  }, [message, loadHistory])
-
-  const submit = () => {
-    setError(null)
-    setFindings(null)
-    setTimedOut(false)
-    setSubmitting(true)
-
-    const pending =
-      mode === 'file' && file !== null
-        ? uploadMessage(file, enrich)
-        : submitUrl(url.trim(), enrich)
-
-    pending
-      .then((created) => {
-        setMessage(created)
-        setFile(null)
-        setUrl('')
-        if (fileInput.current) fileInput.current.value = ''
-      })
-      .catch((err: unknown) => {
-        if (err instanceof IntakeError) setError(err.message)
-        else setError(err instanceof Error ? err.message : 'Submission failed')
-      })
-      .finally(() => setSubmitting(false))
-  }
-
-  const canSubmit =
-    !submitting && (mode === 'file' ? file !== null : url.trim().length > 0)
-
-  const primary = findings?.find((finding) => finding.finding_type !== 'prompt_injection_attempt')
-  const injection = findings?.find(
+  const items = findings.data?.items ?? []
+  const primary = items.find((finding) => finding.finding_type !== 'prompt_injection_attempt')
+  const injection = items.find(
     (finding) => finding.finding_type === 'prompt_injection_attempt',
   )
 
+  function start() {
+    const onSuccess = (created: Message) => {
+      setMessageId(created.id)
+      setFile(null)
+      setUrl('')
+    }
+    if (mode === 'file' && file) upload.mutate({ file, enrich }, { onSuccess })
+    else if (mode === 'url') submit.mutate({ url: url.trim(), enrich }, { onSuccess })
+  }
+
   return (
     <>
-      <div className="page-title">
-        <h1>Phishing Detection</h1>
-        <p className="subtitle">
-          Submit a suspect email or link. Deterministic rules decide what is wrong; the
-          model explains it and ranks what matters.
-        </p>
+      <PageHeader
+        title="Phishing analysis"
+        description="Submit a suspect email or link. Deterministic rules decide what is wrong; the model explains it and ranks what matters — and it can raise a severity, never lower one."
+      />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start">
+        {/* Sticky from `lg` up. An assessment runs long — twenty indicators is normal — and
+            without this the submit card scrolls away, leaving a tall empty column beside the
+            reading and a trip back to the top to queue the next message. */}
+        <Card className="lg:sticky lg:top-6">
+          <CardHeader title="Submit" />
+          <CardBody className="space-y-4">
+            <div
+              role="group"
+              aria-label="Submission type"
+              className="grid grid-cols-2 gap-1 rounded-md border border-border-default p-1"
+            >
+              {(
+                [
+                  { value: 'file', label: 'Email file', Icon: Mail },
+                  { value: 'url', label: 'URL', Icon: Link2 },
+                ] as const
+              ).map(({ value, label, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={mode === value}
+                  onClick={() => setMode(value)}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 rounded-sm px-2 py-1.5',
+                    'text-body-sm font-medium transition-colors duration-(--duration-fast)',
+                    mode === value
+                      ? 'bg-accent-surface text-accent'
+                      : 'text-text-tertiary hover:bg-surface-raised-hover hover:text-text-secondary',
+                  )}
+                >
+                  <Icon className="size-3.5" aria-hidden />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {mode === 'file' ? (
+              <FileDropzone
+                label="Email file"
+                accept=".eml,message/rfc822,text/plain"
+                hint="Exported .eml, up to 2 MB. Attachment metadata is analysed; attachment contents are hashed and discarded, never stored."
+                selected={file}
+                onSelect={setFile}
+                onClear={() => setFile(null)}
+                disabled={busy}
+              />
+            ) : (
+              <Field
+                label="URL or domain"
+                hint="Loopback, private and reserved addresses are refused — they cannot be a phishing host."
+              >
+                <Input
+                  type="url"
+                  placeholder="https://example.test/login"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  disabled={busy}
+                />
+              </Field>
+            )}
+
+            <Checkbox
+              checked={enrich}
+              onChange={(event) => setEnrich(event.target.checked)}
+              disabled={busy}
+              label="Inspect the link targets"
+              description="Fetches the linked pages to follow redirects and look for a credential form. This is the only step that contacts the suspect host, which tells whoever runs it that the message is being investigated."
+            />
+
+            {submissionError ? <InlineError error={submissionError} /> : null}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                leadingIcon={<Send className="size-4" />}
+                disabled={!canSubmit}
+                loading={busy}
+                onClick={start}
+              >
+                Analyse
+              </Button>
+              {messageId ? (
+                <Button variant="ghost" onClick={() => setMessageId(null)}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+          </CardBody>
+        </Card>
+
+        <div className="space-y-4">
+          {message.data ? (
+            <Card>
+              <CardHeader
+                title="Analysis"
+                actions={
+                  <VerdictBadge
+                    verdict={message.data.verdict}
+                    status={message.data.status}
+                  />
+                }
+              />
+              <CardBody className="space-y-5">
+                <KeyValueList
+                  items={[
+                    {
+                      label: 'Submitted',
+                      // Untrusted: a filename or a URL the operator provided.
+                      value: message.data.submitted_url ?? message.data.filename,
+                      mono: true,
+                    },
+                    {
+                      label: 'From',
+                      value: message.data.sender ?? '',
+                      when: Boolean(message.data.sender),
+                      mono: true,
+                    },
+                    {
+                      label: 'Subject',
+                      value: message.data.subject ?? '',
+                      when: Boolean(message.data.subject),
+                    },
+                  ]}
+                />
+
+                <IntakeProgress
+                  status={message.data.status}
+                  error={message.data.error}
+                  summary={[
+                    { label: 'findings', value: message.data.finding_count },
+                    { label: 'links', value: message.data.link_count },
+                    { label: 'attachments', value: message.data.attachment_count },
+                  ]}
+                />
+
+                {injection ? (
+                  <div
+                    role="alert"
+                    className="rounded-md border border-severity-critical/30 bg-severity-critical-bg px-3.5 py-3"
+                  >
+                    <p className="flex items-center gap-2 text-body-sm font-semibold text-text-primary">
+                      <Crosshair
+                        className="size-4 shrink-0 text-severity-critical"
+                        aria-hidden
+                      />
+                      This message tried to instruct the analyser
+                    </p>
+                    <p className="mt-1.5 text-body-sm text-text-secondary">
+                      {injection.description}
+                    </p>
+                    <p className="mt-1.5 text-caption text-text-tertiary">
+                      It was fenced as data and never followed. The assessment below completed
+                      normally.
+                    </p>
+                  </div>
+                ) : null}
+
+                {findings.error ? (
+                  <InlineError
+                    error={findings.error}
+                    onRetry={() => void findings.refetch()}
+                  />
+                ) : null}
+
+                {primary ? (
+                  <div className="space-y-4 border-t border-border-subtle pt-4">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SeverityBadge severity={primary.severity} />
+                        <Badge tone="neutral" size="sm">
+                          {verdictOf(primary) || 'verdict unknown'}
+                        </Badge>
+                        <span className="text-caption text-text-tertiary">
+                          confidence{' '}
+                          <span data-numeric>
+                            {Math.round(primary.confidence * 100)}%
+                          </span>
+                        </span>
+                      </div>
+                      <h3 className="mt-2 text-heading font-semibold text-text-primary">
+                        {primary.title}
+                      </h3>
+                      <p className="mt-1.5 text-body leading-relaxed text-text-secondary">
+                        {primary.description}
+                      </p>
+                    </div>
+
+                    {primary.recommendation ? (
+                      <p className="rounded-md border-l-2 border-accent bg-accent-surface px-3.5 py-2.5 text-body text-text-secondary">
+                        <span className="font-medium text-text-primary">
+                          Recommended action.
+                        </span>{' '}
+                        {primary.recommendation}
+                      </p>
+                    ) : null}
+
+                    <div>
+                      <SectionHeader
+                        className="mb-2"
+                        title="Why"
+                        description="Every indicator below was found by deterministic Python, before any model saw the message."
+                      />
+                      <IndicatorList indicators={indicatorsOf(primary)} />
+                    </div>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      href={`/findings/${primary.id}`}
+                      trailingIcon={<ArrowRight className="size-3.5" />}
+                    >
+                      Open as a finding
+                    </Button>
+                  </div>
+                ) : findings.isPending || findings.isFetching ? (
+                  /* `isPending` alone is not enough. Between the intake reaching `completed`
+                     and the findings request settling, the query is neither pending nor
+                     populated, and this branch briefly rendered "recorded no finding" on a
+                     message that had two. A momentary false clean is the one failure this
+                     agent must never produce, so the wait is stated instead. */
+                  <p className="text-body-sm text-text-tertiary">Loading the assessment…</p>
+                ) : finished && message.data.status === 'completed' ? (
+                  <Well className="py-3">
+                    <p className="text-body-sm text-text-secondary">
+                      Analysis completed and recorded no finding. Nothing the rules check
+                      fired.
+                    </p>
+                  </Well>
+                ) : null}
+              </CardBody>
+            </Card>
+          ) : (
+            <Card>
+              <CardBody>
+                <EmptyState
+                  icon={<Mail className="size-5" />}
+                  title="Nothing submitted yet"
+                  description="Drop an exported message or paste a link. The verdict, the model's explanation and every indicator behind it appear here."
+                />
+              </CardBody>
+            </Card>
+          )}
+        </div>
       </div>
 
-      <section className="panel">
-        <h2>Submit a message</h2>
-
-        <div className="tab-row">
-          <button
-            type="button"
-            className={mode === 'file' ? 'btn btn-primary' : 'btn btn-ghost'}
-            onClick={() => setMode('file')}
-          >
-            Email file
-          </button>
-          <button
-            type="button"
-            className={mode === 'url' ? 'btn btn-primary' : 'btn btn-ghost'}
-            onClick={() => setMode('url')}
-          >
-            URL or domain
-          </button>
-        </div>
-
-        {mode === 'file' ? (
-          <div className="field">
-            <label htmlFor="eml">Email file (.eml)</label>
-            <input
-              id="eml"
-              ref={fileInput}
-              type="file"
-              accept=".eml,message/rfc822,text/plain"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            />
-            <p className="muted">
-              Exported message, up to 2 MB. Attachment metadata is analysed; the
-              attachment contents are hashed and discarded, never stored.
-            </p>
-          </div>
-        ) : (
-          <div className="field">
-            <label htmlFor="url">URL</label>
-            <input
-              id="url"
-              type="url"
-              placeholder="https://example.test/login"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-            />
-            <p className="muted">
-              Loopback, private and reserved addresses are refused - they cannot be a
-              phishing host.
-            </p>
-          </div>
-        )}
-
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={enrich}
-            onChange={(event) => setEnrich(event.target.checked)}
+      <SectionHeader
+        className="mt-8"
+        title="Recent submissions"
+        description="Select one to reopen its analysis."
+      />
+      <Card>
+        {history.isPending ? (
+          <CardBody>
+            <p className="text-body-sm text-text-tertiary">Loading submissions…</p>
+          </CardBody>
+        ) : history.error ? (
+          <CardBody>
+            <InlineError error={history.error} onRetry={() => void history.refetch()} />
+          </CardBody>
+        ) : (history.data?.items.length ?? 0) === 0 ? (
+          <EmptyState
+            icon={<Inbox className="size-5" />}
+            title="No submissions"
+            description="Every message analysed is listed here, newest first."
           />
-          <span>
-            Inspect the link targets
-            <em>
-              This fetches the linked pages to follow redirects and look for a credential
-              form. It is the only step that contacts the suspect host, which tells whoever
-              runs it that the message is being investigated.
-            </em>
-          </span>
-        </label>
-
-        <button type="button" className="btn btn-primary" disabled={!canSubmit} onClick={submit}>
-          {submitting ? 'Submitting…' : 'Analyse'}
-        </button>
-
-        {error !== null ? (
-          <div className="error">
-            <p>{error}</p>
-          </div>
-        ) : null}
-      </section>
-
-      {message !== null ? (
-        <section className="panel">
-          <h2>
-            Analysis
-            <VerdictBadge verdict={message.verdict} status={message.status} />
-          </h2>
-
-          <dl className="intake-summary">
-            <div>
-              <dt>Submitted</dt>
-              {/* Untrusted: a filename or a URL the operator provided. Text only. */}
-              <dd>{message.submitted_url ?? message.filename}</dd>
-            </div>
-            {message.sender !== null ? (
-              <div>
-                <dt>From</dt>
-                <dd>{message.sender}</dd>
-              </div>
-            ) : null}
-            {message.subject !== null ? (
-              <div>
-                <dt>Subject</dt>
-                <dd>{message.subject}</dd>
-              </div>
-            ) : null}
-          </dl>
-
-          <IntakeProgress message={message} />
-
-          {timedOut ? (
-            <div className="error">
-              <p>
-                This is still running after two minutes and the page has stopped polling.
-                Check the worker logs, then reload to pick the status back up.
-              </p>
-            </div>
-          ) : null}
-
-          {injection !== undefined ? (
-            <div className="error">
-              <strong>This message tried to instruct the analyser.</strong>
-              <p>{injection.description}</p>
-              <p className="muted">
-                It was treated as data and never followed. The assessment below completed
-                normally.
-              </p>
-            </div>
-          ) : null}
-
-          {primary !== undefined ? (
-            <div className="verdict-detail">
-              <div className="verdict-head">
-                <SeverityBadge severity={primary.severity as Severity} />
-                <h3>{primary.title}</h3>
-              </div>
-              <p>{primary.description}</p>
-              {primary.recommendation !== null ? (
-                <p className="recommendation">
-                  <strong>Recommended action.</strong> {primary.recommendation}
-                </p>
-              ) : null}
-              <p className="muted">
-                Verdict {verdictOf(primary) || 'unknown'} · confidence{' '}
-                {(primary.confidence * 100).toFixed(0)}%
-              </p>
-
-              <h3>Why</h3>
-              <IndicatorList indicators={indicatorsOf(primary)} />
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section className="panel">
-        <h2>Recent submissions</h2>
-        {history.length === 0 ? (
-          <p className="muted">Nothing submitted yet.</p>
         ) : (
-          <ul className="intake-history">
-            {history.map((entry) => (
+          <ul className="divide-y divide-border-subtle">
+            {history.data?.items.map((entry) => (
               <li key={entry.id}>
-                <button type="button" className="intake-history-row" onClick={() => setMessage(entry)}>
-                  <VerdictBadge verdict={entry.verdict} status={entry.status} />
-                  <span className="intake-history-name">
-                    {entry.submitted_url ?? entry.filename}
+                <button
+                  type="button"
+                  onClick={() => setMessageId(entry.id)}
+                  aria-current={entry.id === messageId ? 'true' : undefined}
+                  className={cn(
+                    'flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-left',
+                    'transition-colors duration-(--duration-fast) hover:bg-surface-raised-hover',
+                    entry.id === messageId && 'bg-surface-raised-hover',
+                  )}
+                >
+                  <VerdictBadge verdict={entry.verdict} status={entry.status} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    {/* Untrusted: a filename or URL the submitter chose. */}
+                    <span className="block truncate font-mono text-body-sm text-text-primary">
+                      {entry.submitted_url ?? entry.filename}
+                    </span>
+                    {entry.subject ? (
+                      <span className="mt-0.5 block truncate text-caption text-text-tertiary">
+                        {entry.subject}
+                      </span>
+                    ) : null}
                   </span>
-                  <span className="muted">
-                    {entry.finding_count} finding(s) ·{' '}
+                  <span className="shrink-0 text-caption text-text-tertiary">
+                    <span data-numeric>{entry.finding_count}</span> finding
+                    {entry.finding_count === 1 ? '' : 's'} ·{' '}
                     {new Date(entry.created_at).toLocaleString()}
                   </span>
                 </button>
@@ -339,7 +409,16 @@ export default function PhishingPage() {
             ))}
           </ul>
         )}
-      </section>
+      </Card>
+
+      <p className="mt-4 text-caption text-text-tertiary">
+        Analysing a message stores its raw bytes, capped at 2 MB, so a verdict can be
+        re-derived. Attachment contents are hashed and discarded. See{' '}
+        <Link href="/findings?agent=phishing" className="text-accent hover:underline">
+          all phishing findings
+        </Link>
+        .
+      </p>
     </>
   )
 }

@@ -188,7 +188,9 @@ async def run_agent(
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def nmap_service_scan(target: str, ports: str | None = None) -> dict[str, Any]:
+async def nmap_service_scan(
+    target: str, ports: str | None = None, include_closed: bool = False
+) -> dict[str, Any]:
     """Run an Nmap service-version scan and return its raw XML.
 
     Only targets inside this server's configured scan allowlist are accepted;
@@ -199,6 +201,12 @@ async def nmap_service_scan(target: str, ports: str | None = None) -> dict[str, 
         target: An IP address inside the allowlist, or an explicitly local name.
         ports: Optional Nmap port specification, e.g. '22,80,443' or '1-1024'.
                Defaults to Nmap's fast top-100 sweep.
+        include_closed: Report closed ports as well as open ones. Off by default,
+               because a discovery scan only cares what is listening. Turn it ON to
+               *verify* a fix: with Nmap's --open, a host whose scanned ports are all
+               closed is omitted from the XML entirely, which is indistinguishable
+               from a scan that failed. The closed-port record is the only evidence
+               that a port was examined and found shut.
     """
     decision = check_target(target, _scan_networks)
     if not decision.allowed:
@@ -212,7 +220,9 @@ async def nmap_service_scan(target: str, ports: str | None = None) -> dict[str, 
     # Configurable rather than a bare "nmap": the Windows installer does not put it
     # on the machine PATH, so relying on the ambient environment reported "nmap is
     # not installed" on a host where it plainly was.
-    command = [settings.scan_nmap_path, "-Pn", "-sV", "--open", "-oX", "-"]
+    command = [settings.scan_nmap_path, "-Pn", "-sV", "-oX", "-"]
+    if not include_closed:
+        command.insert(3, "--open")
     if ports:
         cleaned = _clean_port_spec(ports)
         if cleaned is None:
@@ -466,6 +476,7 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
         base_url=settings.cve_lookup_url,
         timeout_seconds=settings.cve_lookup_timeout_seconds,
         ttl_seconds=settings.cve_cache_ttl_seconds,
+        request_interval_seconds=settings.cve_request_interval_seconds,
     )
 
     async with mcp.session_manager.run(), http_client, cve_client:

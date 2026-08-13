@@ -18,6 +18,7 @@
  *    must render as "not available", never throw and blank the page.
  */
 
+import { SEVERITY_WEIGHT } from '@/lib/severity'
 import type {
   Finding,
   FindingPriority,
@@ -35,6 +36,8 @@ export const FINDING_TYPE_ORDER = [
   'risky_exposed_service',
   'outdated_service',
   'weak_configuration',
+  'phishing_message',
+  'malicious_url',
   'prompt_injection_attempt',
   'informational',
 ] as const satisfies readonly FindingType[]
@@ -44,6 +47,8 @@ export const FINDING_TYPE_LABEL: Record<FindingType, string> = {
   risky_exposed_service: 'Risky exposure',
   outdated_service: 'Outdated service',
   weak_configuration: 'Weak config',
+  phishing_message: 'Phishing message',
+  malicious_url: 'Malicious URL',
   prompt_injection_attempt: 'Injection attempt',
   informational: 'Informational',
 }
@@ -54,25 +59,30 @@ export const FINDING_TYPE_HINT: Record<FindingType, string> = {
   risky_exposed_service: 'Reaching this service is the finding, whatever version it runs.',
   outdated_service: 'Running below the minimum supported version.',
   weak_configuration: 'Configured in a way that weakens an otherwise current service.',
+  phishing_message:
+    'One submitted message, assessed as a whole. The indicators behind the verdict are in the evidence.',
+  malicious_url: 'One submitted link or domain, assessed on its structure and destination.',
   prompt_injection_attempt:
-    'The scanner output contained text addressed to an automated analyst. It was fenced and never followed.',
+    'The ingested content contained text addressed to an automated analyst. It was fenced and never followed.',
   informational: 'No rule matched. A statement about the rules, not a clean bill of health.',
 }
 
 /**
- * Kind chips stay monochrome so they do not compete with the severity badge
- * beside them - the label already distinguishes them. The one exception is an
- * injection attempt, which is a security event about the pipeline itself and
- * earns the alarm colour.
+ * Kind chips stay monochrome so they do not compete with the severity badge beside them -
+ * the label already distinguishes them. The one exception is an injection attempt, which is
+ * a security event about the pipeline itself and earns the alarm colour.
  */
-const NEUTRAL_CHIP = 'text-muted bg-white/5 border-border-strong'
+const NEUTRAL_CHIP = 'text-text-tertiary bg-surface-sunken border-border-default'
 
 export const FINDING_TYPE_CLASS: Record<FindingType, string> = {
   known_cve: NEUTRAL_CHIP,
   risky_exposed_service: NEUTRAL_CHIP,
   outdated_service: NEUTRAL_CHIP,
   weak_configuration: NEUTRAL_CHIP,
-  prompt_injection_attempt: 'text-bad bg-bad/10 border-bad/30',
+  phishing_message: NEUTRAL_CHIP,
+  malicious_url: NEUTRAL_CHIP,
+  prompt_injection_attempt:
+    'text-severity-critical bg-severity-critical-bg border-severity-critical/30',
   informational: NEUTRAL_CHIP,
 }
 
@@ -222,10 +232,12 @@ export const STATUS_LABEL: Record<FindingStatus, string> = {
 }
 
 export const STATUS_CLASS: Record<FindingStatus, string> = {
-  new: 'text-muted bg-white/5 border-border-strong',
-  triaged: 'text-accent-2 bg-accent-2/10 border-accent-2/30',
-  resolved: 'text-ok bg-ok/10 border-ok/30',
-  false_positive: 'text-faint bg-white/5 border-border',
+  new: 'text-text-secondary bg-surface-sunken border-border-default',
+  triaged: 'text-status-active bg-status-active-bg border-status-active/25',
+  resolved: 'text-status-ok bg-status-ok-bg border-status-ok/25',
+  // Dismissed recedes furthest: it is a decision already taken, and it should not draw the
+  // eye the way an open finding does.
+  false_positive: 'text-text-tertiary bg-surface-sunken border-border-subtle',
 }
 
 export const VERIFICATION_LABEL: Record<VerificationOutcome, string> = {
@@ -239,10 +251,10 @@ export const VERIFICATION_LABEL: Record<VerificationOutcome, string> = {
  *  An inconclusive re-check that looks like a clean one is the failure mode the
  *  whole verification design exists to prevent, so it must not read as reassuring. */
 export const VERIFICATION_CLASS: Record<VerificationOutcome, string> = {
-  resolved: 'text-ok',
+  resolved: 'text-status-ok',
   still_present: 'text-severity-medium',
   unverified: 'text-severity-high',
-  unverifiable: 'text-faint',
+  unverifiable: 'text-text-tertiary',
 }
 
 /** The verification history on a finding, oldest first. Empty when never checked. */
@@ -288,6 +300,17 @@ export function byPriority(severityWeight: Record<Severity, number>) {
     if (right) return 1
     return severityWeight[b.severity] - severityWeight[a.severity]
   }
+}
+
+/**
+ * Sort comparator: most severe finding first.
+ *
+ * A thin adapter over `bySeverityDesc`, which compares bare severities. Having it here means
+ * call sites read `.sort(bySeverity)` rather than repeating the property access, and there is
+ * one place to change if ties ever need a secondary key.
+ */
+export function bySeverity(a: Finding, b: Finding): number {
+  return SEVERITY_WEIGHT[b.severity] - SEVERITY_WEIGHT[a.severity]
 }
 
 /** `10.0.0.5:22/tcp`, or just the asset when there is no port. */

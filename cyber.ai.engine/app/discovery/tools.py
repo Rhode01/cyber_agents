@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import time
 
 from cyber_contracts import InterfaceInfo, ServicePort, WebHost
@@ -46,6 +47,17 @@ _LOOPBACK_NET = ipaddress.ip_network("127.0.0.0/8")
 _MAX_SUBNET_ADDRESSES = 1 << 12  # a /20 and smaller (e.g. /21, /22, ... /32)
 
 _PROBE_TIMEOUT_SECONDS = 1.5
+
+# Windows has no `ip`. PowerShell's Get-NetIPAddress reports the same three fields
+# InterfaceInfo needs, and `ConvertTo-Json` means the answer is parsed rather than
+# scraped out of a localised, column-aligned table.
+_POWERSHELL_IFACE_SCRIPT = (
+    "Get-NetIPAddress -AddressFamily IPv4 | "
+    "Select-Object InterfaceAlias,IPAddress,PrefixLength | "
+    "ConvertTo-Json -Compress"
+)
+# Generous: a cold PowerShell start on Windows regularly takes several seconds.
+_POWERSHELL_TIMEOUT_SECONDS = 25
 
 # The nmap -sV pass targets the union of the probed web ports and a few common
 # infra ports (SSH, mail, PostgreSQL, Redis, …) so "Services Active" lists the
@@ -80,26 +92,82 @@ def _parse_iface_line(line: str) -> InterfaceInfo | None:
     )
 
 
-async def list_interfaces() -> list[InterfaceInfo]:
-    """Enumerate connected non-loopback IPv4 interfaces via ``ip``.
+def _parse_powershell_interfaces(stdout: str) -> list[InterfaceInfo]:
+    """Turn ``Get-NetIPAddress | ConvertTo-Json`` output into InterfaceInfos.
 
-    The ``-o`` flag makes the output one line per address (machine parseable);
-    ``-4`` restricts it to IPv4, which is all the MVP's scanners target.
+    ``ConvertTo-Json`` emits a bare object when there is exactly one address and
+    an array otherwise, so both shapes are accepted.
+    """
+    try:
+        payload = json.loads(stdout)
+    except ValueError:
+        return []
+
+    records = payload if isinstance(payload, list) else [payload]
+    interfaces: list[InterfaceInfo] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        name = str(record.get("InterfaceAlias") or "").strip()
+        address = str(record.get("IPAddress") or "").strip()
+        prefix = record.get("PrefixLength")
+        if not name or not address or not isinstance(prefix, int):
+            continue
+        try:
+            addr = ipaddress.ip_interface(f"{address}/{prefix}")
+        except ValueError:
+            continue
+        interfaces.append(
+            InterfaceInfo(
+                name=name,
+                ip=str(addr.ip),
+                prefix=addr.network.prefixlen,
+                subnet=str(addr.network),
+            )
+        )
+    return interfaces
+
+
+async def _enumerate_interfaces() -> list[InterfaceInfo]:
+    """Every IPv4 address on this device, unfiltered, however the OS will report it.
+
+    ``ip`` is tried first because it is right on every Linux host, including the
+    container image. When the binary is missing - which is every Windows host, and
+    the reason the Services page there listed nothing but loopback - the same
+    question is asked of PowerShell instead.
     """
     returncode, stdout, stderr = await run_command(
         ["ip", "-o", "-4", "addr", "show"],
         timeout_seconds=15,
         label="ip",
     )
+    if returncode == 0:
+        parsed = [_parse_iface_line(line) for line in stdout.splitlines()]
+        return [iface for iface in parsed if iface is not None]
+
+    logger.info("discovery.interfaces.fallback", tool="powershell", reason=stderr)
+    returncode, stdout, stderr = await run_command(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", _POWERSHELL_IFACE_SCRIPT],
+        timeout_seconds=_POWERSHELL_TIMEOUT_SECONDS,
+        label="powershell",
+    )
     if returncode != 0:
         logger.warning("discovery.interfaces.failed", returncode=returncode, error=stderr)
         return []
 
+    return _parse_powershell_interfaces(stdout)
+
+
+async def list_interfaces() -> list[InterfaceInfo]:
+    """Enumerate connected non-loopback IPv4 interfaces.
+
+    Enumeration is per-OS (see ``_enumerate_interfaces``); the filtering below is
+    not, because what makes an interface uninteresting - loopback, link-local, a
+    point-to-point host route, a subnet too large to be a real LAN - is the same
+    everywhere.
+    """
     interfaces: list[InterfaceInfo] = []
-    for line in stdout.splitlines():
-        iface = _parse_iface_line(line)
-        if iface is None:
-            continue
+    for iface in await _enumerate_interfaces():
         if iface.name == "lo" or iface.ip.startswith("127."):
             continue
         try:

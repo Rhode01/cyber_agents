@@ -1,1221 +1,473 @@
-/* Tailwind v4. The single @import replaces v3's three @tailwind directives, and
-   it comes first on purpose so the hand-written component styles further down
-   keep winning on equal specificity.
-   Requires: tailwindcss + @tailwindcss/postcss (no autoprefixer in v4). */
+/* Sentinel AI — design tokens and base layer.
+ *
+ * Tailwind v4. The single @import replaces v3's three @tailwind directives.
+ * Requires tailwindcss + @tailwindcss/postcss (no autoprefixer in v4).
+ *
+ * This file used to be 1,048 lines: a token block followed by hand-written rules for
+ * .panel, .btn, .pill, .stat-card, .finding-row and forty other one-off components. That
+ * was a component system with no components - every page reached for whichever class
+ * looked closest, and nothing was reusable. Components now live in src/components/ui/ and
+ * carry their own Tailwind classes, so what remains here is tokens plus a thin base layer.
+ *
+ * ---------------------------------------------------------------------------
+ * Colour is deliberately two-tier, and the split is what makes a light theme a
+ * drop-in later rather than a rewrite:
+ *
+ *   PRIMITIVES  raw ramps. Never referenced by a component.
+ *   SEMANTIC    what things mean - surface, border, text, severity. The only tier
+ *               components are allowed to use.
+ *
+ * A light theme then redefines the semantic tier only, and every component follows.
+ * --------------------------------------------------------------------------- */
+
 @import "tailwindcss";
 
+/* ===========================================================================
+   1. Primitives
+   =========================================================================== */
+
 :root {
-  /* Pentesterra Dark Palette */
-  --bg: #161618;
-  --bg-elev: #1a1a1c;
-  --panel: #1e1e20;
-  --panel-2: #252528;
-  --border: #2d2d30;
-  --border-strong: #3f3f46;
-  --text: #e5e7eb;
-  --muted: #a1a1aa;
-  --faint: #52525b;
+  /* Neutral. Cool-leaning, so the surfaces read as instrument panels rather than
+     warm greys, and so the accent does not turn muddy against them. */
+  --n-950: #07090c;
+  --n-900: #0a0c10;
+  --n-850: #0e1116;
+  --n-800: #11141a;
+  --n-750: #161a21;
+  --n-700: #171b22;
+  --n-650: #1b2027;
+  --n-600: #262c36;
+  --n-500: #363e4a;
+  --n-400: #4b5563;
+  /* Measured, not chosen by eye. `--text-tertiary` maps to this rung and carries 11px
+     captions, eyebrows and table metadata — small text, so WCAG AA wants 4.5:1 and the
+     3:1 large-text allowance does not apply. The previous #67707f measured 3.92 on the page
+     and 3.45 on an overlay, i.e. it failed everywhere it was used. This is the least
+     lightening that clears 4.5:1 on all three surfaces it sits on: page 5.33, raised 5.02,
+     overlay 4.70. */
+  --n-300: #7d8695;
+  --n-200: #9aa5b4;
+  --n-100: #c8d0da;
+  --n-050: #e8ecf2;
 
-  /* Matte Severities */
-  --accent: #38bdf8;
-  --accent-2: #8b5cf6;
-  --accent-glow: rgba(56, 189, 248, 0.1);
+  /* Hues. Each is tuned for a dark ground: bright enough to clear AA on --n-900
+     at text sizes, not so saturated that five of them on one screen vibrate. */
+  --blue-400: #6faaf9;
+  --blue-500: #4c93f7;
+  --blue-600: #2f7ae8;
 
-  --ok: #10b981;
-  --ok-bg: rgba(16, 185, 129, 0.15);
-  --bad: #ef4444;
-  --bad-bg: rgba(239, 68, 68, 0.15);
+  --red-500: #f0544c;
+  --red-600: #d93a33;
 
-  --critical: #ef4444;
-  --high: #f97316;
-  --medium: #eab308;
-  --low: #38bdf8;
-  --info: #d946ef;
+  --orange-500: #f08033;
 
-  --critical-bg: rgba(239, 68, 68, 0.15);
-  --high-bg: rgba(249, 115, 22, 0.15);
-  --medium-bg: rgba(234, 179, 8, 0.15);
-  --low-bg: rgba(56, 189, 248, 0.15);
-  --info-bg: rgba(217, 70, 239, 0.15);
+  --amber-500: #e0a21a;
 
-  --bg-panel: var(--panel);
-  --brand: var(--accent);
-  --fg: var(--text);
+  --teal-500: #35b9a6;
 
+  --slate-500: #8a93a3;
 
-  --radius: 6px;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --violet-500: #8b7cf6;
 }
 
-/* Tailwind v4 theme tokens.
- *
- * `inline` makes each utility compile to the *value* of the referenced custom
- * property rather than a chain of var() lookups - without it, a utility used
- * inside a subtree that redefines the property would silently fall back.
- *
- * The palette above stays the single source of colour truth: this block only
- * exposes it to Tailwind, so `bg-severity-critical` and `--critical` can never
- * drift apart. v4 needs no tailwind.config.ts for this.
- */
+/* ===========================================================================
+   2. Semantic tokens — dark theme
+   ===========================================================================
+   Applied to :root rather than a [data-theme] block so dark is the default with no
+   flash. A light theme becomes `:root[data-theme="light"] { ... }` redefining exactly
+   these names, plus a `@media (prefers-color-scheme: light)` guard. Nothing else moves.
+   =========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces. Four levels, used in strict order: the page, cards on it, things that
+     float above cards, and wells recessed into them. */
+  --surface-page: var(--n-900);
+  --surface-sunken: var(--n-950);
+  --surface-raised: var(--n-800);
+  --surface-raised-hover: var(--n-750);
+  --surface-overlay: var(--n-700);
+
+  /* Borders. `subtle` separates within a card, `default` bounds a card, `strong` marks
+     an interactive or focused edge. */
+  --border-subtle: var(--n-650);
+  --border-default: var(--n-600);
+  --border-strong: var(--n-500);
+
+  --text-primary: var(--n-050);
+  --text-secondary: var(--n-200);
+  --text-tertiary: var(--n-300);
+  --text-inverse: var(--n-900);
+
+  /* Interactive. Blue is reserved for interaction and appears nowhere in the severity
+     ramp - see the note there. */
+  --accent: var(--blue-500);
+  --accent-hover: var(--blue-400);
+  --accent-active: var(--blue-600);
+  --accent-surface: color-mix(in oklab, var(--blue-500) 14%, transparent);
+  --accent-border: color-mix(in oklab, var(--blue-500) 38%, transparent);
+  --accent-contrast: #ffffff;
+
+  --focus-ring: var(--blue-400);
+
+  /* Severity.
+   *
+   * red -> orange -> amber -> teal -> slate.
+   *
+   * Two deliberate departures from the palette this replaces:
+   *
+   * `info` was magenta (#d946ef). A saturated pink for the *least* urgent state fought
+   * the hierarchy - it drew the eye hardest while meaning least. It is now slate, so it
+   * recedes, which is what "informational" should do.
+   *
+   * `low` was the same blue as the accent, which made "low severity" and "clickable"
+   * the same colour. It is now teal: still cool and calm, unmistakably not a control.
+   */
+  --severity-critical: var(--red-500);
+  --severity-high: var(--orange-500);
+  --severity-medium: var(--amber-500);
+  --severity-low: var(--teal-500);
+  --severity-info: var(--slate-500);
+
+  /* Tints for pills and row highlights. color-mix keeps every tint at one consistent
+     strength instead of five hand-picked rgba() values that drifted apart. */
+  --severity-critical-bg: color-mix(in oklab, var(--red-500) 15%, transparent);
+  --severity-high-bg: color-mix(in oklab, var(--orange-500) 15%, transparent);
+  --severity-medium-bg: color-mix(in oklab, var(--amber-500) 15%, transparent);
+  --severity-low-bg: color-mix(in oklab, var(--teal-500) 15%, transparent);
+  --severity-info-bg: color-mix(in oklab, var(--slate-500) 15%, transparent);
+
+  /* Outcome colours, distinct from severity: severity describes a finding, these
+     describe an operation. */
+  --status-ok: var(--teal-500);
+  --status-ok-bg: color-mix(in oklab, var(--teal-500) 15%, transparent);
+  --status-warn: var(--amber-500);
+  --status-warn-bg: color-mix(in oklab, var(--amber-500) 15%, transparent);
+  --status-error: var(--red-500);
+  --status-error-bg: color-mix(in oklab, var(--red-500) 15%, transparent);
+  --status-neutral: var(--slate-500);
+  --status-neutral-bg: color-mix(in oklab, var(--slate-500) 15%, transparent);
+  --status-active: var(--violet-500);
+  --status-active-bg: color-mix(in oklab, var(--violet-500) 15%, transparent);
+
+  /* Radii. Four values, no more. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  /* Elevation, for things that genuinely float only - dialogs, dropdowns, toasts.
+     Static cards use a border instead. That one rule removes most of the visual noise
+     the previous design accumulated, where every panel had both. */
+  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --elevation-2: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --elevation-3: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 4px 12px -4px rgb(0 0 0 / 0.5);
+
+  /* Motion. Two durations and one curve, so nothing in the app animates at a speed
+     nothing else uses. */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ===========================================================================
+   3. Tailwind theme mapping
+   ===========================================================================
+   `inline` compiles each utility to the *value* of the referenced property rather than
+   a chain of var() lookups. Without it, a utility used inside a subtree that redefines
+   the property would silently fall back.
+
+   The severity token names are load-bearing: src/lib/severity.ts writes out literal
+   class strings (`text-severity-critical`, `bg-severity-critical-bg`) because Tailwind
+   v4 scans for literals and an interpolated `bg-severity-${s}` generates nothing at
+   all. Renaming a token here silently removes colour from every badge.
+
+   Spacing is deliberately absent - Tailwind's default scale is already 4px-based, and
+   declaring a parallel one would give every component two valid answers for "8px".
+   =========================================================================== */
+
 @theme inline {
-  --color-bg: var(--bg);
-  --color-bg-elev: var(--bg-elev);
-  --color-panel: var(--panel);
-  --color-panel-2: var(--panel-2);
-  --color-border: var(--border);
+  --color-surface-page: var(--surface-page);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-raised-hover: var(--surface-raised-hover);
+  --color-surface-overlay: var(--surface-overlay);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
   --color-border-strong: var(--border-strong);
-  --color-text: var(--text);
-  --color-muted: var(--muted);
-  --color-faint: var(--faint);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
 
   --color-accent: var(--accent);
-  --color-accent-2: var(--accent-2);
-  --color-ok: var(--ok);
-  --color-bad: var(--bad);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-surface: var(--accent-surface);
+  --color-accent-border: var(--accent-border);
+  --color-accent-contrast: var(--accent-contrast);
 
-  --color-severity-critical: var(--critical);
-  --color-severity-high: var(--high);
-  --color-severity-medium: var(--medium);
-  --color-severity-low: var(--low);
-  --color-severity-info: var(--info);
+  --color-severity-critical: var(--severity-critical);
+  --color-severity-high: var(--severity-high);
+  --color-severity-medium: var(--severity-medium);
+  --color-severity-low: var(--severity-low);
+  --color-severity-info: var(--severity-info);
 
-  --color-severity-critical-bg: var(--critical-bg);
-  --color-severity-high-bg: var(--high-bg);
-  --color-severity-medium-bg: var(--medium-bg);
-  --color-severity-low-bg: var(--low-bg);
-  --color-severity-info-bg: var(--info-bg);
+  --color-severity-critical-bg: var(--severity-critical-bg);
+  --color-severity-high-bg: var(--severity-high-bg);
+  --color-severity-medium-bg: var(--severity-medium-bg);
+  --color-severity-low-bg: var(--severity-low-bg);
+  --color-severity-info-bg: var(--severity-info-bg);
 
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-bg: var(--status-ok-bg);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-bg: var(--status-warn-bg);
+  --color-status-error: var(--status-error);
+  --color-status-error-bg: var(--status-error-bg);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-active: var(--status-active);
+  --color-status-active-bg: var(--status-active-bg);
+
+  /* Type scale. Base is 14px, up from the previous 12.8px - the old value made every
+     screen feel like a debug readout and left no room to go smaller for metadata.
+     Named by role, not size, so a component cannot pick "the big one". */
+  --text-display: 1.75rem;      /* 28px - page titles */
+  --text-display--line-height: 2.125rem;
+  --text-display--letter-spacing: -0.02em;
+
+  --text-title: 1.25rem;        /* 20px - section titles */
+  --text-title--line-height: 1.75rem;
+  --text-title--letter-spacing: -0.01em;
+
+  --text-heading: 1rem;         /* 16px - card titles */
+  --text-heading--line-height: 1.5rem;
+
+  --text-body: 0.875rem;        /* 14px - default */
+  --text-body--line-height: 1.375rem;
+
+  --text-body-sm: 0.8125rem;    /* 13px - dense tables */
+  --text-body-sm--line-height: 1.25rem;
+
+  --text-label: 0.75rem;        /* 12px - form labels, badges */
+  --text-label--line-height: 1rem;
+
+  --text-caption: 0.6875rem;    /* 11px - metadata, eyebrows */
+  --text-caption--line-height: 0.9375rem;
+  --text-caption--letter-spacing: 0.04em;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-display: var(--font-outfit), var(--font-inter), ui-sans-serif, system-ui,
+    sans-serif;
   --font-mono: var(--font-mono);
-  --radius: var(--radius);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-full: var(--radius-full);
+
+  --shadow-elevation-1: var(--elevation-1);
+  --shadow-elevation-2: var(--elevation-2);
+  --shadow-elevation-3: var(--elevation-3);
+
+  --ease-out: var(--ease-out);
 }
 
-* {
-  box-sizing: border-box;
-}
+/* ===========================================================================
+   4. Base layer
+   ===========================================================================
+   Element defaults only. Anything that describes a *component* belongs in
+   src/components/ui/, not here - that boundary is what keeps this file from growing
+   back into the thousand lines it replaced.
+   =========================================================================== */
 
-html,
-body {
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-size: 0.8rem;
-  -webkit-font-smoothing: antialiased;
-}
-
-h1, h2, h3, h4, h5, h6, .eyebrow, .label, .value {
-  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
-}
-
-main {
-  max-width: 76rem;
-  margin: 0 auto;
-  padding: 2.5rem 2rem 4rem;
-}
-
-h1 {
-  font-size: 1.5rem;
-  letter-spacing: -0.03em;
-  margin: 0 0 0.4rem;
-  line-height: 1.15;
-  font-weight: 700;
-}
-
-h2 {
-  font-size: 0.9rem;
-  letter-spacing: -0.01em;
-  margin: 0 0 1rem;
-  font-weight: 600;
-}
-
-h3 {
-  font-size: 0.8rem;
-  margin: 0 0 0.6rem;
-}
-
-p {
-  margin: 0 0 0.75rem;
-}
-
-a {
-  color: var(--accent);
-  transition: color 0.2s ease, text-shadow 0.2s ease;
-}
-
-a:hover {
-  color: #fff;
-  text-shadow: 0 0 8px var(--accent-glow);
-}
-
-code {
-  font-family: var(--font-mono);
-  font-size: 0.85em;
-  background: rgba(148, 163, 184, 0.1);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.1rem 0.4rem;
-}
-
-/* ---------- layout & glassmorphism ---------- */
-
-.shell {
-  display: flex;
-  min-height: 100vh;
-}
-
-.sidebar {
-  width: 260px;
-  flex-shrink: 0;
-  padding: 2rem 1.25rem;
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  background: var(--bg-elev);
-  position: sticky;
-  top: 0;
-  height: 100vh;
-}
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0 0.5rem;
-  margin-bottom: 2rem;
-  font-size: 1.2rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  font-family: var(--font-outfit);
-}
-
-.sidebar-brand .logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: var(--accent);
-  font-size: 1rem;
-  font-weight: 800;
-  color: #000;
-}
-
-.sidebar a {
-  color: var(--muted);
-  text-decoration: none;
-  font-weight: 500;
-  font-size: 0.85rem;
-  padding: 0.65rem 1rem;
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.sidebar a:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.sidebar a.active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
-  font-weight: 600;
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 1rem 0.5rem;
-  font-size: 0.75rem;
-  color: var(--faint);
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-family: var(--font-outfit);
-}
-
-.sidebar-footer .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 10px var(--ok);
-  animation: pulse 2.5s ease-in-out infinite;
-}
-
-.sidebar-footer .dot.running {
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.content {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-}
-
-/* ---------- eyebrow / header ---------- */
-
-.eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 1rem;
-}
-
-.eyebrow::before {
-  content: '';
-  width: 24px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), transparent);
-}
-
-.page-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1.5rem;
-  margin-bottom: 2.25rem;
-}
-
-.page-title h1 {
-  margin: 0;
-}
-
-.page-title .subtitle {
-  color: var(--muted);
-  font-size: 1rem;
-  margin: 0.5rem 0 0;
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  padding: 0.4rem 1rem;
-  border-radius: 999px;
-  white-space: nowrap;
-  font-family: var(--font-outfit);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.pill.ok {
-  color: var(--ok);
-  background: var(--ok-bg);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
-}
-
-.pill.ok .dot,
-.dot.ok {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 10px var(--ok);
-  animation: pulse 2.4s ease-in-out infinite;
-}
-
-.dot.warn {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #f97316;
-  box-shadow: 0 0 10px #f97316;
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.dot.bad {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--bad);
-  box-shadow: 0 0 10px var(--bad);
-}
-
-.pill.bad {
-  color: var(--bad);
-  background: var(--bad-bg);
-  border: 1px solid rgba(244, 63, 94, 0.3);
-  box-shadow: 0 0 15px rgba(244, 63, 94, 0.1);
-}
-
-.pill.pending {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: var(--border-default);
   }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.1);
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--surface-page);
+    color: var(--text-primary);
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+      Roboto, Helvetica, Arial, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Outfit for display type. Headings inherit weight from the component that sets
+     them, so nothing here fixes a size. */
+  h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  p, figure, blockquote, dl, dd {
+    margin: 0;
+  }
+
+  /* Numbers must align in columns. Applied to the elements that carry metrics rather
+     than globally, because tabular figures look wrong in prose. */
+  th, td, [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  code, kbd, pre, samp {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+  }
+
+  /* One focus treatment for the whole app. :focus-visible only, so a mouse click never
+     leaves a ring behind, and a keyboard user never loses their place. */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Buttons and inputs inherit type rather than falling back to the UA's 13px Arial. */
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  ::selection {
+    background-color: var(--accent-surface);
+    color: var(--text-primary);
+  }
+
+  ::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  /* Scrollbars, so a scrolling panel does not punch a bright strip through a dark UI. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: var(--radius-full);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--n-400);
+  }
+
+  /* Honour the OS setting. Transitions are decoration; nothing depends on one
+     completing. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-/* ---------- panels & cards ---------- */
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.75rem 2rem;
-  margin-bottom: 1.5rem;
-  box-shadow: none;
-  transition: border-color 0.2s ease;
-}
-
-.panel:hover {
-  border-color: var(--border-strong);
-}
-
-.panel h2 {
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.panel h3 {
-  color: var(--text);
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.25rem;
-  margin-bottom: 1.5rem;
-}
-
-.stat-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  position: relative;
-  overflow: hidden;
-  box-shadow: none;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-strong);
-}
-
-.stat-card .label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.stat-card .value {
-  font-size: 2.5rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-  margin-top: 0.5rem;
-  font-variant-numeric: tabular-nums;
-  color: #fff;
-}
-
-.stat-card .sub {
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-top: 0.4rem;
-}
-
-.stat-card.accent .value { color: var(--accent); }
-.stat-card.critical .value { color: var(--critical); }
-.stat-card.high .value { color: var(--high); }
-.stat-card.ok .value { color: var(--ok); }
-
-/* ---------- severity badges ---------- */
-
-/* .badge, .badge::before and .sev-critical … .sev-info were removed here.
- *
- * They were the third of three conflicting colour systems for the same five
- * severities: these border and glow values (#ff0055, #ff8800, #00d2ff, #818cf8)
- * never matched the palette above, and `info` was indigo here, magenta in the
- * palette and grey in the page-level maps.
- *
- * Severity presentation now lives in one place: src/lib/severity.ts maps a
- * severity onto the `@theme inline` tokens, and src/components/SeverityBadge.tsx
- * is the only thing that renders it. */
-
-.status.ok,
-.status.bad,
-.status.pending {
-  border-radius: 999px;
-  padding: 0.4rem 0.8rem;
-  font-weight: 700;
-  font-size: 0.85rem;
-  font-family: var(--font-outfit);
-}
-
-.status.ok {
-  color: var(--ok);
-  background: var(--ok-bg);
-}
-
-.status.bad {
-  color: var(--bad);
-  background: var(--bad-bg);
-}
-
-.status.pending {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.error {
-  color: var(--bad);
-  font-size: 0.95rem;
-  margin: 1rem 0 0;
-}
-
-/* ---------- buttons ---------- */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  font: inherit;
-  font-weight: 700;
-  font-size: 0.85rem;
-  padding: 0.65rem 1.2rem;
-  border-radius: var(--radius);
-  cursor: pointer;
-  text-decoration: none;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--text);
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--border-strong);
-}
-
-.btn:active {
-  transform: translateY(1px);
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: #000;
-  border: 1px solid var(--accent);
-}
-
-.btn-primary:hover {
-  background: #7dd3fc;
-  color: #000;
-  text-shadow: none;
-  border-color: #7dd3fc;
-}
-
-.btn-ghost {
-  background: transparent;
-  border-color: transparent;
-  color: var(--muted);
-  box-shadow: none;
-}
-
-.btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  box-shadow: none;
-}
-
-.btn-danger {
-  color: #fff;
-  border: 1px solid var(--bad);
-  background: var(--bad);
-}
-
-.btn-danger:hover {
-  background: #f87171;
-  border-color: #f87171;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-/* ---------- tables & lists ---------- */
-
-.finding-row {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  padding: 1rem 1.25rem;
-  border-radius: var(--radius);
-  text-decoration: none;
-  color: var(--text);
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  transition: border-color 0.2s ease;
-  margin-bottom: 0.6rem;
-}
-
-.finding-row:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: var(--border-strong);
-}
-
-.finding-row .meta {
-  flex: 1;
-  min-width: 0;
-}
-
-.finding-row .title {
-  font-weight: 600;
-  font-size: 1rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #fff;
-}
-
-.finding-row .sub {
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-top: 0.2rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.agent-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  padding: 0.25rem 0.7rem;
-  border-radius: 8px;
-  text-transform: capitalize;
-  border: 1px solid var(--border-strong);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-  white-space: nowrap;
-  font-family: var(--font-outfit);
-}
-
-.agent-chip::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--chip-color, var(--muted));
-  box-shadow: 0 0 8px var(--chip-color, transparent);
-}
-
-.agent-vulnerability {
-  --chip-color: #a78bfa;
-  border-color: rgba(167, 139, 250, 0.3);
-}
-
-.agent-phishing {
-  --chip-color: #fb7185;
-  border-color: rgba(251, 113, 133, 0.3);
-}
-
-.agent-network {
-  --chip-color: #38bdf8;
-  border-color: rgba(56, 189, 248, 0.3);
-}
-
-.agent-webapp {
-  --chip-color: #facc15;
-  border-color: rgba(250, 204, 21, 0.3);
-}
-
-/* ---------- distribution bar ---------- */
-
-.dist-bar {
-  display: flex;
-  height: 14px;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.dist-seg {
-  height: 100%;
-  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
-  animation: grow 1s ease-out forwards;
-}
-
-@keyframes grow {
-  from { opacity: 0.5; }
-  to { opacity: 1; }
-}
-
-.dist-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  margin-top: 1.25rem;
-}
-
-.dist-legend .item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.dist-legend .swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  box-shadow: 0 0 10px currentColor;
-}
-
-/* ---------- module map ---------- */
-
-ul.ports {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.6rem;
-  font-size: 0.95rem;
-}
-
-ul.ports li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1.5rem;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.6rem;
-  transition: padding-left 0.2s ease;
-}
-
-ul.ports li:hover {
-  padding-left: 0.5rem;
-}
-
-ul.ports li:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-ul.ports span:last-child {
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  font-weight: 500;
-  background: rgba(0, 240, 255, 0.1);
-  padding: 0.15rem 0.5rem;
-  border-radius: 6px;
-}
-
-.module-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--ok);
-  font-family: var(--font-outfit);
-}
-
-.module-state::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 10px var(--ok);
-  animation: pulse 2.5s ease-in-out infinite;
-}
-
-/* ---------- dl / detail ---------- */
-
-dl.grid {
-  display: grid;
-  grid-template-columns: minmax(10rem, max-content) 1fr;
-  gap: 0.6rem 1.5rem;
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-dl.grid dt {
-  color: var(--muted);
-  font-weight: 500;
-}
-
-dl.grid dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  color: #fff;
-}
-
-pre {
-  font-family: var(--font-mono);
-}
-
-.grid-2 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1.5rem;
-}
-
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.5rem;
-}
-
-hr.sep {
-  border: none;
-  border-top: 1px solid var(--border-strong);
-  margin: 2rem 0;
-}
-
-/* ---------- forms ---------- */
-
-input,
-select,
-textarea {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  font: inherit;
-  font-size: 0.95rem;
-  outline: none;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
-  backdrop-filter: blur(8px);
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-  background: rgba(0, 0, 0, 0.5);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
-}
-
-label.field {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 0.6rem;
-  font-family: var(--font-outfit);
-}
-
-/* Terminal Window Styles */
-.terminal-window {
-  background-color: #0d1117;
-  border: 1px solid rgba(240, 246, 252, 0.1);
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-}
-
-.terminal-header {
-  background-color: #161b22;
-  border-bottom: 1px solid rgba(240, 246, 252, 0.1);
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-  position: relative;
-}
-
-.terminal-buttons {
-  display: flex;
-  gap: 6px;
-  position: absolute;
-  left: 12px;
-}
-
-.terminal-buttons .btn {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.terminal-buttons .close { background-color: #ff5f56; }
-.terminal-buttons .minimize { background-color: #ffbd2e; }
-.terminal-buttons .maximize { background-color: #27c93f; }
-
-.terminal-title {
-  color: #8b949e;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  width: 100%;
-  text-align: center;
-}
-
-.terminal-body {
-  padding: 12px;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: #c9d1d9;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.terminal-line {
-  margin-bottom: 6px;
-  line-height: 1.4;
-}
-
-.terminal-line .command {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.terminal-line .prompt {
-  color: #7ee787; /* Green prompt */
-  font-weight: bold;
-}
-
-.terminal-line .tool {
-  color: #79c0ff; /* Light blue tool name */
-}
-
-.terminal-line .args {
-  color: #a5d6ff; /* Pale blue args */
-}
-
-.terminal-line .output {
-  color: #8b949e; /* Grayish output */
-  padding-left: 0;
-  margin-top: 4px;
-}
-
-.cursor {
-  display: inline-block;
-  width: 8px;
-  height: 15px;
-  background-color: #c9d1d9;
-  animation: blink 1s step-end infinite;
-  vertical-align: middle;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-/* ---------------------------------------------------------------------------
-   Phishing intake
-   ---------------------------------------------------------------------------
-   Reuses the existing severity variables rather than introducing a second colour
-   system - `--critical` through `--info` are already the single source of truth,
-   shared with SeverityBadge and lib/severity.ts.
-   --------------------------------------------------------------------------- */
-
-.muted {
-  color: var(--muted, #8b949e);
-  font-size: 0.85rem;
-  margin: 0.35rem 0 0;
-}
-
-.field {
-  margin: 1rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.field label {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted, #8b949e);
-}
-
-.field input[type='url'],
-.field input[type='text'] {
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
-  border: 1px solid var(--border, #30363d);
-  background: var(--panel-2, #0d1117);
-  color: inherit;
-  font: inherit;
-}
-
-.field input[type='file'] {
-  padding: 0.5rem 0;
-  color: inherit;
-}
-
-.tab-row {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.checkbox-row {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  margin: 1rem 0;
-  cursor: pointer;
-}
-
-.checkbox-row input {
-  margin-top: 0.25rem;
-}
-
-/* The fetch opt-in carries a real consequence, so its caveat is part of the label
-   rather than tucked away in a tooltip. */
-.checkbox-row em {
-  display: block;
-  font-style: normal;
-  font-size: 0.8rem;
-  color: var(--muted, #8b949e);
-  margin-top: 0.2rem;
-}
-
-.intake-summary,
-.indicator-evidence {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.3rem 1rem;
-  margin: 0.75rem 0;
-  font-size: 0.85rem;
-}
-
-.intake-summary > div,
-.indicator-evidence > div {
-  display: contents;
-}
-
-.intake-summary dt,
-.indicator-evidence dt {
-  color: var(--muted, #8b949e);
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-}
-
-/* Untrusted values live in these cells. `word-break` keeps a hostile 2 KB
-   single-token filename from blowing out the layout. */
-.intake-summary dd,
-.indicator-evidence dd {
-  margin: 0;
-  word-break: break-word;
-}
-
-.intake-stages {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0;
-}
-
-.intake-stage {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  color: var(--muted, #8b949e);
-}
-
-.intake-stage-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--border, #30363d);
-}
-
-.intake-stage.done { color: var(--ok, #3fb950); }
-.intake-stage.done .intake-stage-dot { background: var(--ok, #3fb950); }
-.intake-stage.active { color: var(--medium); }
-.intake-stage.active .intake-stage-dot {
-  background: var(--medium);
-  animation: blink 1.2s step-end infinite;
-}
-.intake-stage.failed { color: var(--critical); }
-.intake-stage.failed .intake-stage-dot { background: var(--critical); }
-
-.verdict-detail { margin-top: 1.25rem; }
-
-.verdict-head {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.verdict-head h3 { margin: 0; }
-
-.recommendation {
-  padding: 0.75rem 1rem;
-  border-left: 3px solid var(--accent, #58a6ff);
-  background: var(--panel-2, rgba(88, 166, 255, 0.06));
-  border-radius: 0 8px 8px 0;
-}
-
-.indicator-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.indicator-group h3 {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.indicator-count {
-  font-size: 0.72rem;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  background: var(--border, #30363d);
-  color: inherit;
-}
-
-.indicator-group ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.indicator {
-  padding: 0.75rem 0.9rem;
-  border: 1px solid var(--border, #30363d);
-  border-radius: 10px;
-  background: var(--panel-2, rgba(255, 255, 255, 0.02));
-}
-
-.indicator-head {
-  display: flex;
-  gap: 0.55rem;
-  align-items: baseline;
-}
-
-.indicator-fact { font-weight: 500; }
-
-.sev-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-top: 0.35rem;
-}
-
-/* Literal class names, one per severity. Tailwind never sees these - they are plain
-   CSS - but an interpolated name would also defeat any future scan, so they stay
-   written out. */
-.sev-critical { background: var(--critical); }
-.sev-high { background: var(--high); }
-.sev-medium { background: var(--medium); }
-.sev-low { background: var(--low); }
-.sev-info { background: var(--info); }
-
-.indicator-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 0.4rem;
-  font-size: 0.75rem;
-  color: var(--muted, #8b949e);
-}
-
-.indicator-meta code {
-  font-size: 0.72rem;
-  padding: 0.05rem 0.35rem;
-  border-radius: 4px;
-  background: var(--border, #30363d);
-}
-
-.indicator-why {
-  margin: 0.5rem 0 0;
-  font-size: 0.82rem;
-  color: var(--muted, #8b949e);
-}
-
-.intake-history {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.intake-history-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border, #30363d);
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.intake-history-row:hover { border-color: var(--accent, #58a6ff); }
-
-.intake-history-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* ===========================================================================
+   5. Utilities
+   ===========================================================================
+   Only patterns Tailwind cannot express, kept to a minimum.
+   =========================================================================== */
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* A skeleton's shimmer. One animation, one duration, used by every loading state. */
+@utility skeleton-pulse {
+  background: linear-gradient(
+    90deg,
+    var(--surface-raised) 0%,
+    var(--surface-raised-hover) 50%,
+    var(--surface-raised) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Print, for /reports. Findings on paper is a real workflow, and the dark theme wastes
+   a cartridge and loses the severity tints entirely. */
+@media print {
+  :root {
+    --surface-page: #ffffff;
+    --surface-raised: #ffffff;
+    --surface-overlay: #ffffff;
+    --surface-sunken: #f6f7f9;
+    --border-subtle: #e2e5ea;
+    --border-default: #cfd4dc;
+    --border-strong: #9aa5b4;
+    --text-primary: #0a0c10;
+    --text-secondary: #3f4653;
+    --text-tertiary: #67707f;
+    color-scheme: light;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  [data-print-hide] {
+    display: none !important;
+  }
 }

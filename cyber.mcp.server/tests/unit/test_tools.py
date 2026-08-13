@@ -8,11 +8,15 @@ whoever can reach the port, so they get the most attention here.
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import httpx
 import pytest
 
 from app.server import _clean_port_spec
 from app.tools import CVE_ID_RE, CveLookup, check_target, classify_exposure, parse_networks
+from app.tools import cve as cve_module
 from app.tools.targets import normalize_target
 
 DEFAULT_NETWORKS = parse_networks(
@@ -162,6 +166,10 @@ def _lookup(handler: object, **kwargs: object) -> CveLookup:
         base_url="https://cve.test/api/cve",
         timeout_seconds=1.0,
         ttl_seconds=float(kwargs.get("ttl", 60)),  # type: ignore[arg-type]
+        # No pacing by default: these tests assert on behaviour, not on timing,
+        # and the production interval would only make the suite slower. The
+        # pacing itself is asserted on in test_enrichment_lookups.py.
+        request_interval_seconds=float(kwargs.get("interval", 0.0)),  # type: ignore[arg-type]
     )
 
 
@@ -221,10 +229,17 @@ async def test_a_cve5_record_is_understood() -> None:
     assert result["references"] == ["https://example.test/advisory"]
 
 
+@pytest.fixture
+def fast_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Collapse the rate-limit wait so a 429 test does not cost a real second."""
+    monkeypatch.setattr(cve_module, "_RATE_LIMIT_DEFAULT_WAIT", 0.0)
+
+
 @pytest.mark.parametrize(
     ("status_code", "expected"),
     [(404, "not-found"), (429, "unavailable"), (500, "unavailable")],
 )
+@pytest.mark.usefixtures("fast_backoff")
 async def test_upstream_failures_are_data_not_exceptions(
     status_code: int, expected: str
 ) -> None:
@@ -236,6 +251,85 @@ async def test_upstream_failures_are_data_not_exceptions(
     result = await _lookup(handler).lookup("CVE-2022-0001")
 
     assert result["status"] == expected
+
+
+@pytest.mark.usefixtures("fast_backoff")
+async def test_a_rate_limited_lookup_is_retried_once_and_then_succeeds() -> None:
+    """The failure this exists for: one assessment's CVEs arrive as a burst.
+
+    Live, ``CVE-2018-15473`` was enriched and ``CVE-2019-0211`` came back 429 in
+    the same run - two findings from the same scan, one with a CVSS score and one
+    without, for no reason to do with either.
+    """
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(429, headers={"retry-after": "1"}, json={})
+        return httpx.Response(200, json={"summary": "Enriched on the retry.", "cvss3": 7.5})
+
+    result = await _lookup(handler).lookup("CVE-2019-0211")
+
+    assert calls == 2
+    assert result["status"] == "ok"
+    assert result["cvss"] == 7.5
+
+
+@pytest.mark.usefixtures("fast_backoff")
+async def test_a_persistent_rate_limit_says_so_rather_than_a_bare_status_code() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(429, json={})
+
+    result = await _lookup(handler).lookup("CVE-2019-0211")
+
+    # Retried exactly once - a lookup that keeps retrying is an assessment that
+    # never finishes.
+    assert calls == 2
+    assert result["status"] == "unavailable"
+    assert "rate-limiting" in result["detail"]
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ({"retry-after": "2"}, 2.0),
+        ({"retry-after": "0"}, 1.0),
+        ({"retry-after": "600"}, 5.0),
+        ({"retry-after": "Wed, 21 Oct 2015 07:28:00 GMT"}, 1.0),
+        ({}, 1.0),
+    ],
+)
+def test_retry_after_is_honoured_but_clamped(
+    header: dict[str, str], expected: float
+) -> None:
+    """A service may ask for a ten-minute pause; an assessment cannot wait for it."""
+    response = httpx.Response(429, headers=header)
+
+    assert cve_module._retry_after_seconds(response) == expected
+
+
+async def test_requests_are_spaced_out_rather_than_bursting() -> None:
+    """Pacing is what stops the 429 happening in the first place."""
+    started: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        started.append(time.monotonic())
+        return httpx.Response(200, json={"summary": "ok"})
+
+    lookup = _lookup(handler, interval=0.05)
+    await asyncio.gather(
+        *(lookup.lookup(f"CVE-2022-000{index}") for index in range(1, 4))
+    )
+
+    assert len(started) == 3
+    gaps = [second - first for first, second in zip(started, started[1:], strict=False)]
+    assert all(gap >= 0.04 for gap in gaps), gaps
 
 
 async def test_an_unreachable_service_is_reported_as_unavailable() -> None:

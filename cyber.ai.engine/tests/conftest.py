@@ -15,6 +15,7 @@ from cyber_contracts import INTERNAL_KEY_HEADER
 from httpx import ASGITransport, AsyncClient
 
 from app.core.config import get_settings
+from app.llm.factory import LlmNotConfiguredError
 from app.main import app
 
 AGENTS = ("vulnerability", "phishing", "network", "webapp")
@@ -52,6 +53,51 @@ def _no_mcp(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         "app.agents.phishing.enrich",
     ):
         monkeypatch.setattr(f"{module}.open_tools", unavailable)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _no_llm(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Force the no-model path for every test that does not opt out.
+
+    Same reason as ``_no_mcp``: without this the suite behaves differently depending
+    on whether an ``OPENAI_API_KEY`` happens to be sitting in ``.env``. When one was
+    added for live testing, four tests asserting the rules-only fallback started
+    failing - and, worse, the whole suite began making real paid API calls, taking
+    98 seconds instead of 8.
+
+    Tests that want a model install their own fake *inside the test body*, which runs
+    after this fixture, so their patch wins. See test_assessment_merge.py.
+    """
+
+    def refuse(context: dict[str, str] | None = None) -> object:
+        del context
+        msg = "LLM disabled for tests by the _no_llm fixture"
+        raise LlmNotConfiguredError(msg)
+
+    # Every module that imports the factory has to be listed, because monkeypatch replaces
+    # a name where it is *bound*, not where it is defined. The list is derived from
+    # `grep -rl require_configured_chat_model app/agents`, and `raising=True` is deliberate
+    # so that adding an agent which resolves its own model fails here loudly instead of
+    # quietly opting out of the guard.
+    #
+    # Two gaps this closes:
+    #
+    #   * `app.agents.phishing.nodes` was listed and does not import it - the phishing agent
+    #     resolves its model in `assessor.py`. With `raising=False` that created an unused
+    #     attribute and covered nothing.
+    #   * `network` and `webapp` were never listed at all, so with a key in `.env` their
+    #     `reason` nodes made real paid calls on every run. That is what made
+    #     `test_stub_agents_still_answer_with_one_placeholder` flaky: it asserts an `info`
+    #     placeholder, and a live model returns a real finding instead. The suite took 32s
+    #     rather than 8s for the same reason.
+    for module in (
+        "app.agents.vulnerability.nodes",
+        "app.agents.phishing.assessor",
+        "app.agents.network.nodes",
+        "app.agents.webapp.nodes",
+    ):
+        monkeypatch.setattr(f"{module}.require_configured_chat_model", refuse)
     yield
 
 

@@ -14,6 +14,7 @@ the assessment.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -29,6 +30,39 @@ CVE_ID_RE: Final = re.compile(r"^CVE-\d{4}-\d{4,7}$", re.IGNORECASE)
 # Bounded so a long-running server cannot grow this without limit; CVE records
 # change rarely enough that an hour-old answer is still a good answer.
 _MAX_CACHE_ENTRIES: Final = 512
+
+# Public CVE services rate-limit bursts. One assessment enriches every CVE its
+# rules matched at once, so the requests arrive as a burst by construction and
+# all but the first came back 429 - which is not an error the caller can act on,
+# it is us asking too fast. Two measures, in order of how much they cost:
+#
+#   * requests are *started* a fixed interval apart. They still overlap, so N
+#     lookups take one round trip plus (N-1) intervals, not N round trips.
+#   * a 429 is retried once, after whatever the service asked for.
+_DEFAULT_REQUEST_INTERVAL: Final = 0.35
+_RATE_LIMIT_RETRIES: Final = 1
+_RATE_LIMIT_DEFAULT_WAIT: Final = 1.0
+# A service that asks for a longer pause than this is not worth blocking an
+# assessment for; the finding is reported without enrichment instead.
+_RATE_LIMIT_MAX_WAIT: Final = 5.0
+_TOO_MANY_REQUESTS: Final = 429
+
+
+def _retry_after_seconds(response: httpx.Response) -> float:
+    """How long the service asked us to wait, clamped to something bearable.
+
+    Only the delay-seconds form of ``Retry-After`` is honoured. The HTTP-date
+    form is legal but is not worth a date parser here: falling back to the
+    default wait is a second's difference, and a wrong parse is a hang.
+    """
+    raw = response.headers.get("retry-after", "").strip()
+    try:
+        requested = float(raw)
+    except ValueError:
+        return _RATE_LIMIT_DEFAULT_WAIT
+    if requested <= 0:
+        return _RATE_LIMIT_DEFAULT_WAIT
+    return min(requested, _RATE_LIMIT_MAX_WAIT)
 
 
 @dataclass(slots=True)
@@ -47,12 +81,44 @@ class CveLookup:
         base_url: str,
         timeout_seconds: float,
         ttl_seconds: float,
+        request_interval_seconds: float = _DEFAULT_REQUEST_INTERVAL,
     ) -> None:
         self._client = client
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_seconds
         self._ttl = ttl_seconds
         self._cache: dict[str, _CacheEntry] = {}
+        self._interval = max(request_interval_seconds, 0.0)
+        # Guards `_next_slot_at` only, never held across a request: the point is
+        # to space requests out, not to serialise them.
+        self._slot_lock = asyncio.Lock()
+        self._next_slot_at = 0.0
+
+    async def _wait_for_slot(self) -> None:
+        """Claim the next outbound request slot, sleeping until it comes round."""
+        if self._interval <= 0:
+            return
+        async with self._slot_lock:
+            now = time.monotonic()
+            starts_at = max(now, self._next_slot_at)
+            self._next_slot_at = starts_at + self._interval
+        delay = starts_at - now
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+    async def _fetch(self, cve_id: str) -> httpx.Response:
+        """GET one record, spacing requests out and retrying a rate-limit once."""
+        for attempt in range(_RATE_LIMIT_RETRIES + 1):
+            await self._wait_for_slot()
+            response = await self._client.get(
+                f"{self._base_url}/{cve_id}", timeout=self._timeout
+            )
+            if response.status_code != _TOO_MANY_REQUESTS or attempt == _RATE_LIMIT_RETRIES:
+                return response
+            wait = _retry_after_seconds(response)
+            logger.info("cve.lookup.rate_limited cve=%s retrying_in=%.1fs", cve_id, wait)
+            await asyncio.sleep(wait)
+        return response  # unreachable: the loop always returns on its last pass
 
     def _cached(self, cve_id: str) -> dict[str, Any] | None:
         entry = self._cache.get(cve_id)
@@ -87,9 +153,7 @@ class CveLookup:
             return {**hit, "cached": True}
 
         try:
-            response = await self._client.get(
-                f"{self._base_url}/{normalized}", timeout=self._timeout
-            )
+            response = await self._fetch(normalized)
         except httpx.HTTPError as exc:
             logger.warning("cve.lookup.unreachable cve=%s error=%s", normalized, exc)
             return {
@@ -105,11 +169,16 @@ class CveLookup:
 
         if response.is_error:
             logger.warning("cve.lookup.error cve=%s status=%s", normalized, response.status_code)
-            return {
-                "cve_id": normalized,
-                "status": "unavailable",
-                "detail": f"The CVE service answered {response.status_code}.",
-            }
+            # Deliberately still `unavailable`: a caller can only ever do one thing
+            # with a failed enrichment, which is carry on without it. The detail
+            # says which failure it was so the operator is not left guessing.
+            detail = (
+                "The CVE service is rate-limiting this host; the lookup was retried "
+                "once and still refused."
+                if response.status_code == _TOO_MANY_REQUESTS
+                else f"The CVE service answered {response.status_code}."
+            )
+            return {"cve_id": normalized, "status": "unavailable", "detail": detail}
 
         try:
             body = response.json()

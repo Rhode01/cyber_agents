@@ -6,20 +6,27 @@
  */
 
 import type {
+  AgentKind,
+  AgentRunRequest,
+  AgentRunResponse,
   BackendHealth,
+  DiscoveryReport,
   Finding,
   FindingList,
   FindingStatus,
   FindingSummary,
   FindingVerifyResponse,
-  AgentRunRequest,
-  AgentRunResponse,
-  AgentKind,
-  DiscoveryReport,
+  Message,
+  MessageList,
+  MessageStatus,
+  MessageVerdict,
   RunCreate,
-  RunUpdate,
-  RunRead,
   RunList,
+  RunRead,
+  RunUpdate,
+  Scan,
+  ScanIntakeStatus,
+  ScanList,
   ScanStatus,
   SystemModules,
 } from '@/types'
@@ -58,14 +65,20 @@ function formatErrorDetail(detail: unknown): string {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
 
+  // A content type is set only for a JSON string body.
+  //
+  // This used to be `init?.body ? 'application/json' : undefined`, which broke every
+  // multipart upload: for `FormData` the browser must set the header itself, because only
+  // it knows the boundary token. Forcing `application/json` onto a FormData body produces
+  // a request the server cannot parse - which is why scan and message upload had to be
+  // written against a separate client.
+  const headers: Record<string, string> = { accept: 'application/json' }
+  if (typeof init?.body === 'string') headers['content-type'] = 'application/json'
+
   try {
     response = await fetch(`${BACKEND_URL}${path}`, {
       ...init,
-      headers: { 
-        accept: 'application/json',
-        'Content-Type': init?.body ? 'application/json' : undefined,
-        ...init?.headers 
-      } as HeadersInit,
+      headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
       cache: 'no-store',
     })
   } catch {
@@ -188,6 +201,103 @@ export function fetchRunStatus(): Promise<ScanStatus> {
 
 export function fetchSystemModules(): Promise<SystemModules> {
   return request<SystemModules>('/system/modules')
+}
+
+/* ===========================================================================
+   Scan intake
+   ===========================================================================
+   `POST /scans` has existed in the backend since Phase 2 and nothing in the UI has ever
+   called it. The Scans page showed *findings grouped by run* instead, so the one path
+   that uploads a scanner report was unreachable from a browser.
+   =========================================================================== */
+
+/**
+ * Upload a scanner report and queue it for analysis.
+ *
+ * Returns 202 with a scan id; poll `fetchScan` until the status is `completed` or
+ * `failed`. Relies on the FormData handling in `request` above.
+ */
+export function uploadScan(file: File, asset?: string): Promise<Scan> {
+  const form = new FormData()
+  form.append('file', file)
+  if (asset) form.append('asset', asset)
+  return request<Scan>('/scans', { method: 'POST', body: form })
+}
+
+/** One scan intake record. The poll target after an upload. */
+export function fetchScan(id: string): Promise<Scan> {
+  return request<Scan>(`/scans/${id}`)
+}
+
+export function fetchScans(
+  options: { status?: ScanIntakeStatus; limit?: number; offset?: number } = {},
+): Promise<ScanList> {
+  const params = new URLSearchParams()
+  if (options.status) params.set('status', options.status)
+  params.set('limit', String(options.limit ?? 50))
+  params.set('offset', String(options.offset ?? 0))
+  return request<ScanList>(`/scans?${params.toString()}`)
+}
+
+/* ===========================================================================
+   Message intake — phishing
+   ===========================================================================
+   Merged in from `lib/intake.ts`, which existed only to avoid a merge conflict while two
+   writers shared this file. With one owner that reason is gone, and a single client means
+   one `request` implementation rather than two that drift.
+   =========================================================================== */
+
+/**
+ * Upload an email message for phishing analysis.
+ *
+ * `enrich` opts in to fetching the linked pages, which is the only step that contacts the
+ * suspect host. Off by default, here and on the server.
+ */
+export function uploadMessage(file: File, enrich = false): Promise<Message> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('enrich', String(enrich))
+  return request<Message>('/messages', { method: 'POST', body: form })
+}
+
+/** Submit a bare URL or domain for phishing analysis. */
+export function submitUrl(url: string, enrich = false): Promise<Message> {
+  return request<Message>('/messages/url', {
+    method: 'POST',
+    body: JSON.stringify({ url, enrich }),
+  })
+}
+
+/** One message intake record. The poll target after a submission. */
+export function fetchMessage(id: string): Promise<Message> {
+  return request<Message>(`/messages/${id}`)
+}
+
+export function fetchMessages(
+  options: {
+    status?: MessageStatus
+    verdict?: MessageVerdict
+    limit?: number
+    offset?: number
+  } = {},
+): Promise<MessageList> {
+  const params = new URLSearchParams()
+  if (options.status) params.set('status', options.status)
+  if (options.verdict) params.set('verdict', options.verdict)
+  params.set('limit', String(options.limit ?? 50))
+  params.set('offset', String(options.offset ?? 0))
+  return request<MessageList>(`/messages?${params.toString()}`)
+}
+
+/** Findings produced by one intake record, scan or message. */
+export function fetchFindingsFor(
+  key: { scanId: string } | { messageId: string },
+  limit = 50,
+): Promise<FindingList> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if ('scanId' in key) params.set('scan_id', key.scanId)
+  else params.set('message_id', key.messageId)
+  return request<FindingList>(`/findings?${params.toString()}`)
 }
 
 // The settings and email-connect clients were removed with their endpoints. The

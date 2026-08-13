@@ -74,6 +74,16 @@ class Settings(BaseSettings):
     cve_lookup_url: str = "https://cve.circl.lu/api/cve"
     cve_lookup_timeout_seconds: float = Field(default=8.0, gt=0)
     cve_cache_ttl_seconds: float = Field(default=3600.0, ge=0)
+    cve_request_interval_seconds: float = Field(
+        default=0.35,
+        ge=0,
+        description=(
+            "Minimum gap between outbound CVE requests. One assessment enriches every "
+            "CVE its rules matched at once, and the public service answers 429 to a "
+            "burst - which costs the enrichment on findings that are otherwise correct. "
+            "Set to 0 for a provider with no rate limit, or raise it for a stricter one."
+        ),
+    )
 
     # Phishing link inspection. `fetch_url` is the only tool that contacts a host an
     # attacker chose, so it needs two switches to agree: this one, and the per-request

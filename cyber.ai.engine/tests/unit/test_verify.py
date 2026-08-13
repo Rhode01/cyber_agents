@@ -29,12 +29,15 @@ SCAN_WITH_SSH = """<?xml version="1.0"?>
   </host>
 </nmaprun>"""
 
-# The same host with nothing open: a successful check that observed nothing. This
-# is what a remediated host looks like, and it must not read as a failed scan.
+# The same host with the scanned port CLOSED: a successful check that observed
+# nothing. This is what a remediated host looks like, and it must not read as a
+# failed scan. The closed <port> record only appears because verification asks for
+# include_closed - with Nmap's --open the whole <host> element is absent.
 SCAN_CLEAN = """<?xml version="1.0"?>
 <nmaprun scanner="nmap" version="7.94">
   <host><status state="up"/><address addr="10.0.0.5" addrtype="ipv4"/>
-    <ports></ports>
+    <ports><port protocol="tcp" portid="22"><state state="closed"/>
+      <service name="ssh" method="table"/></port></ports>
   </host>
 </nmaprun>"""
 
@@ -114,6 +117,23 @@ async def test_the_scan_covers_exactly_the_ports_under_verification(
 
     assert tools.calls[0]["ports"] == "22,443,8080", "deduplicated and sorted"
     assert tools.calls[0]["target"] == "10.0.0.5"
+
+
+async def test_the_scan_asks_for_closed_ports(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: without this, a remediated host is unverifiable.
+
+    Nmap's --open omits a host from the XML entirely when none of its scanned ports
+    are open. A genuinely fixed target therefore parsed as "no host entries" and was
+    recorded as "could not verify" - the one case this pass exists to recognise,
+    indistinguishable from a failed scan. Caught against a live nmap, not in a unit
+    test, which is why the assertion is on the argument rather than the outcome.
+    """
+    tools = _FakeTools(_ok(SCAN_CLEAN))
+    _install(monkeypatch, tools)
+
+    await verify(_request(ports=[5900]))
+
+    assert tools.calls[0]["include_closed"] is True
 
 
 async def test_a_port_that_was_never_scanned_is_not_covered(
