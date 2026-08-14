@@ -41,6 +41,11 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 NMAP_SCAN_TOOL: Final = "nmap_service_scan"
+# The two halves of a network sweep. Separate tools rather than one, because the
+# cheap phase (which addresses answer at all) is what keeps the expensive phase
+# proportional to the hosts that exist rather than to the size of the range.
+HOST_DISCOVERY_TOOL: Final = "nmap_host_discovery"
+SWEEP_SCAN_TOOL: Final = "nmap_sweep_scan"
 CVE_LOOKUP_TOOL: Final = "lookup_cve"
 ASSET_EXPOSURE_TOOL: Final = "lookup_asset_exposure"
 
@@ -54,6 +59,8 @@ FETCH_URL_TOOL: Final = "fetch_url"
 ALLOWED_TOOLS: Final = frozenset(
     {
         NMAP_SCAN_TOOL,
+        HOST_DISCOVERY_TOOL,
+        SWEEP_SCAN_TOOL,
         CVE_LOOKUP_TOOL,
         ASSET_EXPOSURE_TOOL,
         DNS_RECORDS_TOOL,

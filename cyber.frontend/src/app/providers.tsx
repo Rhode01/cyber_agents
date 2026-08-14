@@ -41,10 +41,18 @@ export function Providers({ children }: { children: ReactNode }) {
   /* Development-only handle on the cache.
      Without it, diagnosing "why is this view stuck loading" means guessing from the network
      tab: the request status is visible but the query's own status, error and retry count are
-     not. Gated on NODE_ENV so it never reaches a production bundle. */
-  if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
-    ;(window as unknown as { queryClient?: QueryClient }).queryClient = queryClient
-  }
+     not. Gated on NODE_ENV so it never reaches a production bundle.
+
+     In an effect, not inline in the render body: assigning to `window` while rendering is a
+     side effect, and React Compiler rejects it outright rather than letting it slide. */
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    const target = window as unknown as { queryClient?: QueryClient }
+    target.queryClient = queryClient
+    return () => {
+      delete target.queryClient
+    }
+  }, [queryClient])
 
   return (
     <QueryClientProvider client={queryClient}>

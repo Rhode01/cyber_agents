@@ -16,9 +16,12 @@ from app.tools.rdap import lookup_domain_age
 from app.tools.scanning import duration_seconds, run_command, tool_result
 from app.tools.scope import fetch_scope_networks
 from app.tools.targets import (
+    MAX_SWEEP_ADDRESSES,
     FetchDecision,
+    RangeDecision,
     TargetDecision,
     check_fetch_target,
+    check_range,
     check_target,
     normalize_target,
     parse_networks,
@@ -27,11 +30,14 @@ from app.tools.targets import (
 __all__ = [
     "CVE_ID_RE",
     "DNS_AVAILABLE",
+    "MAX_SWEEP_ADDRESSES",
     "CveLookup",
     "FetchDecision",
     "FetchOutcome",
+    "RangeDecision",
     "TargetDecision",
     "check_fetch_target",
+    "check_range",
     "check_target",
     "classify_exposure",
     "duration_seconds",

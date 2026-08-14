@@ -314,17 +314,31 @@ export default function RunPipelinePage() {
             <CardHeader title="Target" />
             <CardBody className="space-y-4">
               <Field
-                label="Host, IP, URL or domain"
-                hint="For example 10.0.0.20 or https://app.example.com."
+                label="Host, IP, range, URL or domain"
+                hint="One host like 10.0.0.20, or a whole network like 192.168.1.0/24."
               >
                 <Input
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
-                  placeholder="10.0.0.20"
+                  placeholder="10.0.0.20 or 192.168.1.0/24"
                   required
                   disabled={running}
                 />
               </Field>
+
+              {/* A range is discovered first and only the live hosts are scanned, so the
+                  cost is the machines that exist rather than the size of the range. Worth
+                  saying here: a /24 finishing in minutes is otherwise surprising. */}
+              {target.includes('/') ? (
+                <p className="text-caption text-text-tertiary">
+                  A range is swept in two passes — find which addresses answer, then scan
+                  only those. The whole range must be authorised under{' '}
+                  <Link href="/scope" className="text-accent hover:underline">
+                    Scan scope
+                  </Link>{' '}
+                  first, and a sweep is visible to any monitoring on the network.
+                </p>
+              ) : null}
 
               <div>
                 <Eyebrow>Which agents</Eyebrow>
@@ -403,7 +417,20 @@ export default function RunPipelinePage() {
                 </ul>
               )}
 
-              {error ? <InlineError error={error} /> : null}
+              {error ? (
+                <div className="space-y-2">
+                  <InlineError error={error} />
+                  {/* The backend's refusal already names the exact range to authorise, so
+                      the only thing missing is somewhere to do it. Matched on the phrase
+                      the target policy uses rather than on a status code, because the
+                      refusal arrives as an agent result, not as an HTTP error. */}
+                  {/scope|authorised range|allowlist/i.test(error) ? (
+                    <Button size="sm" variant="secondary" href="/scope">
+                      Authorise this range
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
             </CardBody>
             <CardFooter>
               <p className="text-caption text-text-tertiary">

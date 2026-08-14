@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import time
+import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -35,7 +36,9 @@ from app import __version__
 from app.config import get_settings
 from app.security import INTERNAL_KEY_HEADER, InternalKeyMiddleware
 from app.tools import (
+    MAX_SWEEP_ADDRESSES,
     CveLookup,
+    check_range,
     check_target,
     classify_exposure,
     duration_seconds,
@@ -126,7 +129,13 @@ async def describe_platform() -> dict[str, Any]:
         "version": __version__,
         "phase": 2,
         "agents": list(AGENT_NAMES),
-        "security_tools": ["nmap_service_scan", "lookup_cve", "lookup_asset_exposure"],
+        "security_tools": [
+            "nmap_service_scan",
+            "nmap_host_discovery",
+            "nmap_sweep_scan",
+            "lookup_cve",
+            "lookup_asset_exposure",
+        ],
         "note": (
             "Findings are produced by a deterministic rule engine in the ai.engine; "
             "the tools here supply evidence and enrichment, never findings."
@@ -319,6 +328,206 @@ async def nmap_service_scan(
             "format": "nmap_xml",
         },
     )
+
+
+@mcp.tool()
+async def nmap_host_discovery(target_range: str) -> dict[str, Any]:
+    """Find which addresses in a range are alive, without probing their services.
+
+    The cheap half of a network sweep: a ping sweep over the whole range, so the
+    expensive half is proportional to the hosts that actually exist rather than to
+    the size of the range. A /24 is seconds; service-scanning all 256 addresses
+    blindly would be most of an hour spent on addresses nobody is using.
+
+    The entire range must be inside an authorised scope entry. A range that is only
+    partly authorised is refused outright, because a sweep would reach hosts nobody
+    attested to.
+
+    Args:
+        target_range: A CIDR range, e.g. '192.168.1.0/24'. A single address works too.
+    """
+    decision = check_range(target_range, await _allowed_networks())
+    if not decision.allowed:
+        return tool_result(
+            ok=False,
+            tool="nmap-discovery",
+            error=decision.reason,
+            meta={"range": decision.network, "refused": True},
+        )
+
+    command = [
+        settings.scan_nmap_path,
+        "-sn",  # host discovery only: no port scan, no version probing
+        "-n",   # no reverse DNS - it doubles the wall clock and nothing here reads it
+        f"-{settings.scan_timing_template}",
+        "-oX",
+        "-",
+        decision.network,
+    ]
+
+    started_at = time.monotonic()
+    returncode, stdout, stderr = await run_command(
+        command, timeout_seconds=settings.scan_discovery_timeout_seconds, label="nmap-discovery"
+    )
+    elapsed = duration_seconds(started_at)
+    hosts = _live_hosts(stdout)
+    logger.info(
+        "mcp.nmap_discovery range=%s returncode=%s duration=%s live=%s scanned=%s",
+        decision.network,
+        returncode,
+        elapsed,
+        len(hosts),
+        decision.address_count,
+    )
+    return tool_result(
+        ok=returncode == 0,
+        tool="nmap-discovery",
+        output=stdout,
+        error=stderr.strip(),
+        meta={
+            "range": decision.network,
+            "live_hosts": hosts,
+            "live_count": len(hosts),
+            "addresses_in_range": decision.address_count,
+            "returncode": returncode,
+            "duration_seconds": elapsed,
+            "format": "nmap_xml",
+        },
+    )
+
+
+@mcp.tool()
+async def nmap_sweep_scan(hosts: list[str], ports: str | None = None) -> dict[str, Any]:
+    """Service-scan several hosts in one pass and return the combined XML.
+
+    The expensive half of a network sweep, run against the addresses host discovery
+    found alive. One nmap invocation rather than one per host: nmap parallelises
+    across targets far better than we would by issuing them serially.
+
+    **Every host is re-checked against scope here**, not just the range they came
+    from. The list arrives as an argument, so trusting it because a previous call
+    validated a range would let a doctored intermediate result widen the scan.
+
+    Args:
+        hosts: Addresses to scan, as returned by nmap_host_discovery.
+        ports: Optional Nmap port specification. Defaults to Nmap's fast sweep.
+    """
+    if not hosts:
+        return tool_result(
+            ok=False,
+            tool="nmap-sweep",
+            error="No hosts were supplied. Run nmap_host_discovery first.",
+            meta={"refused": True},
+        )
+    if len(hosts) > MAX_SWEEP_ADDRESSES:
+        return tool_result(
+            ok=False,
+            tool="nmap-sweep",
+            error=(
+                f"{len(hosts)} hosts were supplied and one sweep may cover at most "
+                f"{MAX_SWEEP_ADDRESSES:,}."
+            ),
+            meta={"refused": True},
+        )
+
+    allowed = await _allowed_networks()
+    vetted: list[str] = []
+    refused: list[str] = []
+    for host in hosts:
+        decision = await check_target(host, allowed, resolve=False)
+        if decision.allowed:
+            vetted.append(decision.target)
+        else:
+            refused.append(host)
+
+    if not vetted:
+        return tool_result(
+            ok=False,
+            tool="nmap-sweep",
+            error=(
+                "None of the supplied hosts are inside an authorised range. "
+                f"Refused: {', '.join(refused[:10])}"
+            ),
+            meta={"refused": True, "refused_hosts": refused},
+        )
+
+    command = [settings.scan_nmap_path, "-Pn", "-sV", "--open", "-oX", "-"]
+    command += [
+        f"-{settings.scan_timing_template}",
+        "--host-timeout",
+        f"{settings.scan_host_timeout_seconds:g}s",
+    ]
+    if ports:
+        cleaned = _clean_port_spec(ports)
+        if cleaned is None:
+            return tool_result(
+                ok=False,
+                tool="nmap-sweep",
+                error=(
+                    f"{ports!r} is not a valid port specification. Use digits, commas "
+                    "and hyphens, e.g. '22,80,8000-8100'."
+                ),
+                meta={"refused": True},
+            )
+        command += ["-p", cleaned]
+    else:
+        command.append("-F")
+    command += vetted
+
+    started_at = time.monotonic()
+    returncode, stdout, stderr = await run_command(
+        command, timeout_seconds=settings.scan_sweep_timeout_seconds, label="nmap-sweep"
+    )
+    elapsed = duration_seconds(started_at)
+    logger.info(
+        "mcp.nmap_sweep hosts=%s refused=%s returncode=%s duration=%s bytes=%s",
+        len(vetted),
+        len(refused),
+        returncode,
+        elapsed,
+        len(stdout),
+    )
+    return tool_result(
+        ok=returncode == 0 and bool(stdout.strip()),
+        tool="nmap-sweep",
+        output=stdout,
+        error=stderr.strip(),
+        meta={
+            "hosts_scanned": vetted,
+            # Reported rather than silently dropped: a sweep that covered 40 of 50
+            # hosts must not read as a clean bill of health for the other 10.
+            "hosts_refused": refused,
+            "returncode": returncode,
+            "duration_seconds": elapsed,
+            "format": "nmap_xml",
+        },
+    )
+
+
+def _live_hosts(raw_xml: str) -> list[str]:
+    """Addresses reported ``up`` by a ``-sn`` discovery scan.
+
+    Parsed here rather than in the caller so the ai.engine receives a list it can
+    act on, not XML it has to understand twice. Unreadable output yields an empty
+    list, which the caller sees as "nothing alive" alongside a non-zero returncode.
+    """
+    try:
+        root = ET.fromstring(raw_xml)  # noqa: S314 - local, trusted format layer
+    except ET.ParseError:
+        return []
+
+    live: list[str] = []
+    for host_el in root.findall("host"):
+        status_el = host_el.find("status")
+        if status_el is None or status_el.get("state") != "up":
+            continue
+        address_el = host_el.find("address[@addrtype='ipv4']")
+        if address_el is None:
+            address_el = host_el.find("address[@addrtype='ipv6']")
+        address = address_el.get("addr", "") if address_el is not None else ""
+        if address:
+            live.append(address)
+    return live
 
 
 @mcp.tool()

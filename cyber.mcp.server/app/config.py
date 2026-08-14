@@ -82,6 +82,14 @@ class Settings(BaseSettings):
         gt=0,
         description="Passed to nmap as --host-timeout, so a slow host degrades to partial results.",
     )
+    # A sweep is many hosts in one command, so it needs its own, longer budget -
+    # `--host-timeout` still bounds each host individually, which is what keeps one
+    # unresponsive address from consuming the whole sweep.
+    scan_sweep_timeout_seconds: float = Field(default=900.0, gt=0)
+    # Host discovery is a ping sweep with no service probing: seconds for a /24,
+    # even across a slow link. Kept separate so the cheap phase cannot inherit the
+    # expensive phase's patience and hide a network that is simply unreachable.
+    scan_discovery_timeout_seconds: float = Field(default=180.0, gt=0)
     scan_timing_template: Literal["T0", "T1", "T2", "T3", "T4", "T5"] = Field(
         default="T4",
         description=(

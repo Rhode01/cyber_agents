@@ -7,7 +7,9 @@ from app.mcp.client import (
     ALLOWED_TOOLS,
     ASSET_EXPOSURE_TOOL,
     CVE_LOOKUP_TOOL,
+    HOST_DISCOVERY_TOOL,
     NMAP_SCAN_TOOL,
+    SWEEP_SCAN_TOOL,
     McpTools,
     open_tools,
 )
@@ -16,7 +18,9 @@ __all__ = [
     "ALLOWED_TOOLS",
     "ASSET_EXPOSURE_TOOL",
     "CVE_LOOKUP_TOOL",
+    "HOST_DISCOVERY_TOOL",
     "NMAP_SCAN_TOOL",
+    "SWEEP_SCAN_TOOL",
     "McpTools",
     "open_tools",
 ]

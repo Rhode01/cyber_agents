@@ -248,6 +248,119 @@ async def check_target(
 
 
 # ---------------------------------------------------------------------------
+# Sweeping a whole range.
+# ---------------------------------------------------------------------------
+
+# How many addresses one sweep may cover. This is a *runtime* bound, not an
+# authorisation one - a scope entry may legitimately be a /16, but sweeping 65,536
+# addresses is days of scanning, so the two limits are deliberately different
+# numbers with different reasons. The refusal message has to say which one it is,
+# or an operator reads "too big" as "not authorised" and adds the range again.
+MAX_SWEEP_ADDRESSES: Final = 1024  # a /22
+
+# Ranges no attestation covers. Duplicated from ``cyber_contracts.scope`` rather
+# than imported: this module has no dependency on the contracts package (see
+# app/security.py, which defines its own header constant for the same reason), and
+# a scanner that trusts the caller to have already checked is a scanner with no
+# check. The important entry is link-local, which holds the cloud instance-metadata
+# endpoint at 169.254.169.254.
+FORBIDDEN_SWEEP_NETWORKS: Final = (
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("0.0.0.0/8"),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RangeDecision:
+    """Whether a whole range may be swept, and why not when it may not."""
+
+    allowed: bool
+    network: str
+    reason: str = ""
+    address_count: int = 0
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "allowed": self.allowed,
+            "network": self.network,
+            "reason": self.reason,
+            "address_count": self.address_count,
+        }
+
+
+def _covers(network: Network, entry: Network) -> bool:
+    """Is ``network`` wholly inside ``entry``?
+
+    ``subnet_of`` raises on a version mismatch, so that is checked first rather
+    than caught - an IPv4 range is not partially inside an IPv6 grant.
+    """
+    if network.version != entry.version:
+        return False
+    return network.subnet_of(entry)  # type: ignore[arg-type]
+
+
+def check_range(raw: str, allowed: list[Network]) -> RangeDecision:
+    """Decide whether an entire range may be swept.
+
+    The rule that matters is **subset, not overlap**. A range that is half inside an
+    authorised network is refused outright, because sweeping it would touch hosts
+    nobody authorised - the same reasoning ``_decide_hostname`` applies to a name
+    resolving to several addresses.
+
+    Args:
+        raw: A CIDR range, e.g. ``192.168.1.0/24``. A bare address is accepted and
+            treated as a single-host range.
+        allowed: The configured allowlist unioned with operator-managed scope.
+    """
+    candidate = (raw or "").strip()
+    if not candidate:
+        return RangeDecision(False, "", "No range was supplied.")
+
+    try:
+        network = ipaddress.ip_network(candidate, strict=False)
+    except ValueError:
+        return RangeDecision(
+            False,
+            candidate,
+            f"{candidate!r} is not an IP range. Use CIDR notation, for example "
+            "192.168.1.0/24, or a single address.",
+        )
+
+    for forbidden in FORBIDDEN_SWEEP_NETWORKS:
+        if network.version == forbidden.version and network.overlaps(forbidden):
+            return RangeDecision(
+                False,
+                str(network),
+                f"{network} overlaps {forbidden}, which is never sweepable. That range "
+                "holds the cloud instance-metadata endpoint and other addresses that "
+                "are not any client's to authorise.",
+            )
+
+    if network.num_addresses > MAX_SWEEP_ADDRESSES:
+        return RangeDecision(
+            False,
+            str(network),
+            f"{network} covers {network.num_addresses:,} addresses and one sweep may "
+            f"cover at most {MAX_SWEEP_ADDRESSES:,}. This is a limit on how long a "
+            "single scan may run, not on what you are authorised to scan - split it "
+            "into smaller ranges and sweep them separately.",
+        )
+
+    if not any(_covers(network, entry) for entry in allowed):
+        return RangeDecision(
+            False,
+            str(network),
+            f"{network} is not wholly inside any authorised range. A range that is "
+            "only partly in scope is out of scope, because a sweep would reach hosts "
+            "nobody authorised. Add it under Scan scope if this network is in scope "
+            "for testing.",
+        )
+
+    return RangeDecision(True, str(network), address_count=network.num_addresses)
+
+
+# ---------------------------------------------------------------------------
 # The inverse policy: fetching a link out of a hostile message.
 # ---------------------------------------------------------------------------
 
