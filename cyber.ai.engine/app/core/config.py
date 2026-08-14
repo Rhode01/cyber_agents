@@ -51,7 +51,15 @@ class Settings(BaseSettings):
     # server, not here. Unreachable is survivable: the deterministic rule engine
     # still produces findings, just without enrichment.
     mcp_server_url: str = "http://localhost:8004/mcp"
-    mcp_timeout_seconds: float = Field(default=180.0, gt=0)
+    # One link in a chain that has to stay ordered, innermost first:
+    #
+    #   nmap --host-timeout  <  MCP SCAN_TIMEOUT_SECONDS  <  this  <  the
+    #   backend's AI_ENGINE_TIMEOUT_SECONDS
+    #
+    # Each layer must outlive the one it is waiting on. Invert any pair and the
+    # outer layer gives up first, so a scan that was going to succeed is reported
+    # as a timeout and its partial output is thrown away.
+    mcp_timeout_seconds: float = Field(default=300.0, gt=0)
 
     # ------------------------------------------------------------- phishing --
     phishing_max_indicators: int = Field(

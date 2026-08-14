@@ -246,6 +246,45 @@ export interface ScanStatus {
   current: RunRead | null
 }
 
+/* ---- scan scope ---- */
+
+/**
+ * One range this platform is authorised to scan.
+ *
+ * `network` is what the scanner actually checks against — always a CIDR, a bare
+ * address stored as /32. `requested` is what the operator typed: when they entered
+ * a hostname, the backend resolved it and stored the address, keeping the name for
+ * display only. It is never consulted when deciding scope, because a name would let
+ * whoever controls DNS choose what gets scanned.
+ *
+ * `authorized_by` is an attestation, recorded and never verified. It exists so
+ * "who said we could scan this" has a written answer.
+ */
+export interface ScanScopeEntry {
+  id: string
+  network: string
+  /** The hostname it was added by, or empty when an address was entered directly. */
+  requested: string
+  label: string
+  authorized_by: string
+  note: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ScanScopeList {
+  items: ScanScopeEntry[]
+  total: number
+}
+
+export interface ScanScopeCreate {
+  target: string
+  label?: string
+  authorized_by: string
+  note?: string
+}
+
 export interface ModuleStatus {
   name: string
   host: string

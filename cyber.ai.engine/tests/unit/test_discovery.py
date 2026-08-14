@@ -9,11 +9,13 @@ subnet sweep exists anymore.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
 from cyber_contracts import InterfaceInfo, ServicePort, WebHost
 
+from app.api.v1.endpoints import discovery as discovery_endpoint
 from app.discovery import tools
 
 
@@ -69,6 +71,54 @@ async def test_list_interfaces_filters_loopback_host_routes_and_big_subnets(
     assert names == ["wlan0", "lan22"]
     assert interfaces[0].subnet == "192.168.1.0/24"
     assert interfaces[1].subnet == "10.20.0.0/22"
+
+
+async def test_interfaces_fall_back_to_powershell_when_ip_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows has no `ip`, and without this discovery only ever saw loopback.
+
+    The symptom was a Services page that listed 127.0.0.1 and nothing else on
+    every Windows host, with `ip is not installed on this host` in the log.
+    """
+    calls: list[str] = []
+
+    async def fake_run_command(command: list[str], **_: Any) -> tuple[int, str, str]:
+        calls.append(command[0])
+        if command[0] == "ip":
+            return -1, "", "ip is not installed on this host"
+        return 0, (
+            '[{"InterfaceAlias":"Wi-Fi","IPAddress":"192.168.1.106","PrefixLength":24},'
+            '{"InterfaceAlias":"Loopback Pseudo-Interface 1","IPAddress":"127.0.0.1",'
+            '"PrefixLength":8}]'
+        ), ""
+
+    monkeypatch.setattr(tools, "run_command", fake_run_command)
+
+    interfaces = await tools.list_interfaces()
+
+    assert calls == ["ip", "powershell"], "`ip` is still tried first"
+    assert [i.name for i in interfaces] == ["Wi-Fi"], "loopback is filtered as it is on Linux"
+    assert interfaces[0].ip == "192.168.1.106"
+    assert interfaces[0].subnet == "192.168.1.0/24"
+
+
+def test_a_single_powershell_address_is_parsed_as_well_as_a_list() -> None:
+    """ConvertTo-Json emits a bare object when there is exactly one address."""
+    single = tools._parse_powershell_interfaces(
+        '{"InterfaceAlias":"Ethernet","IPAddress":"10.20.0.1","PrefixLength":22}'
+    )
+
+    assert [i.name for i in single] == ["Ethernet"]
+    assert single[0].subnet == "10.20.0.0/22"
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    ["", "not json", "[]", '[{"InterfaceAlias":"X"}]', '[{"IPAddress":"nope","PrefixLength":24}]'],
+)
+def test_unusable_powershell_output_yields_no_interfaces(stdout: str) -> None:
+    assert tools._parse_powershell_interfaces(stdout) == []
 
 
 async def test_own_device_hosts_are_interface_ips_plus_loopback() -> None:
@@ -194,3 +244,92 @@ async def test_run_discovery_scans_own_device_and_reports_notes(
     assert [w.host for w in web_hosts] == ["10.0.0.10", "127.0.0.1"]
     assert [s.host for s in services] == ["10.0.0.10", "127.0.0.1"]
     assert any("no subnet sweep" in n for n in notes)
+
+
+# ---------------------------------------------------------------------------
+# The endpoint: overlapping callers share one scan.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _no_scan_in_flight() -> Any:
+    """Clear the module-level in-flight task so these tests do not leak into each other."""
+    discovery_endpoint._in_flight = None
+    yield
+    discovery_endpoint._in_flight = None
+
+
+async def _stub_run_discovery(monkeypatch: pytest.MonkeyPatch, *, delay: float) -> list[int]:
+    """Replace the discovery stage with a slow no-op, and count how often it runs."""
+    runs: list[int] = []
+
+    async def fake_run_discovery() -> Any:
+        runs.append(1)
+        await asyncio.sleep(delay)
+        return [], [], ["127.0.0.1"], [], [], ["stubbed"]
+
+    monkeypatch.setattr(discovery_endpoint, "run_discovery", fake_run_discovery)
+    return runs
+
+
+async def test_overlapping_requests_share_one_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two callers, one nmap.
+
+    React's development double-render mounts the Services page twice, so every
+    visit fired two `POST /discovery/run` within a few hundred milliseconds and
+    the log showed `discovery.run.start` twice. Each is a full `nmap -sV` pass
+    over the same addresses, and they slow each other down.
+    """
+    runs = await _stub_run_discovery(monkeypatch, delay=0.05)
+
+    first, second = await asyncio.gather(
+        discovery_endpoint.run(), discovery_endpoint.run()
+    )
+
+    assert len(runs) == 1, "the second caller must join the first scan, not start another"
+    assert first is second, "both callers get the same report"
+    assert first.live_hosts == ["127.0.0.1"]
+
+
+async def test_a_later_request_starts_a_fresh_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Coalescing must not turn into caching - Re-scan has to actually re-scan."""
+    runs = await _stub_run_discovery(monkeypatch, delay=0)
+
+    await discovery_endpoint.run()
+    await discovery_endpoint.run()
+
+    assert len(runs) == 2
+
+
+async def test_one_caller_giving_up_does_not_cancel_the_other(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A client hanging up must not abort the scan someone else is waiting on."""
+    runs = await _stub_run_discovery(monkeypatch, delay=0.1)
+
+    impatient = asyncio.create_task(discovery_endpoint.run())
+    patient = asyncio.create_task(discovery_endpoint.run())
+    await asyncio.sleep(0.01)
+    impatient.cancel()
+
+    report = await patient
+
+    assert len(runs) == 1
+    assert report.live_hosts == ["127.0.0.1"]
+
+
+async def test_a_failed_scan_is_not_remembered(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A crashed scan must not wedge every later request onto the same failure."""
+
+    async def failing() -> Any:
+        raise RuntimeError("nmap exploded")
+
+    monkeypatch.setattr(discovery_endpoint, "run_discovery", failing)
+    with pytest.raises(RuntimeError):
+        await discovery_endpoint.run()
+
+    runs = await _stub_run_discovery(monkeypatch, delay=0)
+    report = await discovery_endpoint.run()
+
+    assert len(runs) == 1
+    assert report.live_hosts == ["127.0.0.1"]

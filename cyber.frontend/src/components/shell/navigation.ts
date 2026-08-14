@@ -7,6 +7,7 @@ import {
   Play,
   Server,
   Shield,
+  ShieldCheck,
   type LucideIcon,
 } from '@/components/ui/icons'
 
@@ -97,6 +98,20 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: Server,
         title: 'Services',
         description: 'What is exposed on the hosts this platform has seen.',
+      },
+    ],
+  },
+  {
+    id: 'configure',
+    label: 'Configure',
+    routes: [
+      {
+        href: '/scope',
+        label: 'Scan scope',
+        icon: ShieldCheck,
+        title: 'Scan scope',
+        description:
+          'The hosts this platform is permitted to scan. Anything not listed is refused before the scanner starts.',
       },
     ],
   },

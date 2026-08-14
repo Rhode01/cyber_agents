@@ -38,8 +38,12 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------ ai.engine --
     ai_engine_url: str = "http://localhost:8003"
     # Agents can launch live scans (nmap, nuclei) against a target, so a run
-    # legitimately takes minutes rather than seconds.
-    ai_engine_timeout_seconds: float = Field(default=300.0, gt=0)
+    # legitimately takes minutes rather than seconds. This is the outermost link
+    # of the scan timeout chain and must exceed the ai.engine's
+    # MCP_TIMEOUT_SECONDS, which must in turn exceed the MCP server's
+    # SCAN_TIMEOUT_SECONDS. One assessment is a scan plus CVE enrichment plus a
+    # model call, so the headroom over the scan alone is deliberate.
+    ai_engine_timeout_seconds: float = Field(default=420.0, gt=0)
 
     # ------------------------------------------------------------- mcpserver --
     mcp_server_url: str = "http://mcpserver:8004"

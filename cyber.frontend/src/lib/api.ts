@@ -27,6 +27,8 @@ import type {
   Scan,
   ScanIntakeStatus,
   ScanList,
+  ScanScopeCreate,
+  ScanScopeList,
   ScanStatus,
   SystemModules,
 } from '@/types'
@@ -201,6 +203,39 @@ export function fetchRunStatus(): Promise<ScanStatus> {
 
 export function fetchSystemModules(): Promise<SystemModules> {
   return request<SystemModules>('/system/modules')
+}
+
+/* ===========================================================================
+   Scan scope
+   ===========================================================================
+   Which hosts this platform is authorised to scan. Before this existed the answer
+   lived in the MCP server's `SCAN_ALLOWED_TARGETS` env var, so putting a client's
+   server in scope meant editing config and redeploying.
+   =========================================================================== */
+
+/** Authorised ranges. `include_revoked` adds the withdrawn ones, for the record. */
+export function fetchScanScope(includeRevoked = false): Promise<ScanScopeList> {
+  const params = includeRevoked ? '?include_revoked=true' : ''
+  return request<ScanScopeList>(`/scan-scope${params}`)
+}
+
+/**
+ * Authorise scanning of a host or range.
+ *
+ * `target` may be a hostname; the backend resolves it and stores the addresses. A
+ * name that resolves to several addresses produces several entries, each revocable
+ * on its own.
+ */
+export function addScanScope(payload: ScanScopeCreate): Promise<ScanScopeList> {
+  return request<ScanScopeList>('/scan-scope', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Revoke one authorisation. The row is kept, deactivated, so the record survives. */
+export function revokeScanScope(id: string): Promise<void> {
+  return request<void>(`/scan-scope/${id}`, { method: 'DELETE' })
 }
 
 /* ===========================================================================

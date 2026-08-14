@@ -14,6 +14,7 @@ from app.tools.exposure import classify_exposure
 from app.tools.fetch import FetchOutcome, fetch_page
 from app.tools.rdap import lookup_domain_age
 from app.tools.scanning import duration_seconds, run_command, tool_result
+from app.tools.scope import fetch_scope_networks
 from app.tools.targets import (
     FetchDecision,
     TargetDecision,
@@ -35,6 +36,7 @@ __all__ = [
     "classify_exposure",
     "duration_seconds",
     "fetch_page",
+    "fetch_scope_networks",
     "lookup_dns_records",
     "lookup_domain_age",
     "normalize_target",

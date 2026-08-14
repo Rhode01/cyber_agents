@@ -40,12 +40,14 @@ from app.tools import (
     classify_exposure,
     duration_seconds,
     fetch_page,
+    fetch_scope_networks,
     lookup_dns_records,
     parse_networks,
     run_command,
     tool_result,
 )
 from app.tools.rdap import lookup_domain_age as rdap_lookup_domain_age
+from app.tools.targets import Network
 
 logger = logging.getLogger("app")
 
@@ -83,6 +85,33 @@ def get_cve_lookup() -> CveLookup:
     if cve_lookup is None:
         raise RuntimeError("CVE lookup is not initialized")
     return cve_lookup
+
+
+async def _allowed_networks() -> list[Network]:
+    """Everything this server may scan: the static config plus operator-managed scope.
+
+    Fetched per scan rather than cached. A scan takes minutes and this call takes
+    milliseconds, so a cache would buy nothing and would cost the property that
+    matters: a revoked authorisation stops working when it is revoked, not when a
+    TTL happens to expire.
+
+    A backend that cannot be reached contributes nothing, leaving the configured
+    list standing alone - so an outage refuses scans of client hosts rather than
+    permitting them on the strength of a list nobody could read. An HTTP client
+    that does not exist yet is the same situation and gets the same answer, rather
+    than raising: a scan tool that throws where it should refuse turns a policy
+    decision into a stack trace.
+    """
+    if http_client is None:
+        logger.warning(
+            "scope.fetch.no_client (falling back to the configured allowlist only)"
+        )
+        return list(_scan_networks)
+
+    fetched = await fetch_scope_networks(
+        http_client, request_timeout=settings.backend_timeout_seconds
+    )
+    return [*_scan_networks, *fetched]
 
 
 # ---------------------------------------------------------------------------
@@ -194,11 +223,14 @@ async def nmap_service_scan(
     """Run an Nmap service-version scan and return its raw XML.
 
     Only targets inside this server's configured scan allowlist are accepted;
-    anything else is refused without running the scanner. The XML is returned
-    verbatim for the caller to parse - every string in it is untrusted data.
+    anything else is refused without running the scanner. A hostname is resolved
+    first and every address it returns must be in the allowlist, so naming a host
+    can never reach somewhere an address could not. The XML is returned verbatim
+    for the caller to parse - every string in it is untrusted data.
 
     Args:
-        target: An IP address inside the allowlist, or an explicitly local name.
+        target: A hostname, or an IP address inside the allowlist, or an
+               explicitly local name.
         ports: Optional Nmap port specification, e.g. '22,80,443' or '1-1024'.
                Defaults to Nmap's fast top-100 sweep.
         include_closed: Report closed ports as well as open ones. Off by default,
@@ -208,13 +240,20 @@ async def nmap_service_scan(
                from a scan that failed. The closed-port record is the only evidence
                that a port was examined and found shut.
     """
-    decision = check_target(target, _scan_networks)
+    decision = await check_target(
+        target, await _allowed_networks(), resolve=settings.scan_resolve_hostnames
+    )
     if not decision.allowed:
         return tool_result(
             ok=False,
             tool="nmap",
             error=decision.reason,
-            meta={"target": decision.target, "refused": True},
+            meta={
+                "target": decision.target,
+                "requested": decision.requested or target,
+                "addresses": list(decision.addresses),
+                "refused": True,
+            },
         )
 
     # Configurable rather than a bare "nmap": the Windows installer does not put it
@@ -223,6 +262,16 @@ async def nmap_service_scan(
     command = [settings.scan_nmap_path, "-Pn", "-sV", "-oX", "-"]
     if not include_closed:
         command.insert(3, "--open")
+    # Sized for a remote host: without a host timeout a firewalled target burns the
+    # whole budget and our own kill discards the XML, so a slow scan reports nothing
+    # rather than what it did manage to see.
+    command += [
+        f"-{settings.scan_timing_template}",
+        "--host-timeout",
+        f"{settings.scan_host_timeout_seconds:g}s",
+    ]
+    if decision.is_ipv6:
+        command.append("-6")
     if ports:
         cleaned = _clean_port_spec(ports)
         if cleaned is None:
@@ -246,8 +295,9 @@ async def nmap_service_scan(
     )
     elapsed = duration_seconds(started_at)
     logger.info(
-        "mcp.nmap target=%s returncode=%s duration=%s bytes=%s",
+        "mcp.nmap target=%s requested=%s returncode=%s duration=%s bytes=%s",
         decision.target,
+        decision.requested or target,
         returncode,
         elapsed,
         len(stdout),
@@ -259,6 +309,11 @@ async def nmap_service_scan(
         error=stderr.strip(),
         meta={
             "target": decision.target,
+            # What the caller asked for, and everything it resolved to. A finding is
+            # keyed by the address that was scanned, so this is the only record of
+            # the name behind it.
+            "requested": decision.requested or target,
+            "addresses": list(decision.addresses),
             "returncode": returncode,
             "duration_seconds": elapsed,
             "format": "nmap_xml",
@@ -284,14 +339,14 @@ async def lookup_cve(cve_id: str) -> dict[str, Any]:
 async def lookup_asset_exposure(asset: str) -> dict[str, Any]:
     """Classify how exposed an asset is, and report what is already known about it.
 
-    Returns 'internal', 'internet' or 'unknown'. A hostname is never resolved to
-    decide this, so an unverified asset comes back 'unknown' rather than being
+    Returns 'internal', 'internet' or 'unknown'. A hostname is resolved to decide
+    this; one that does not resolve comes back 'unknown' rather than being
     optimistically called internal.
 
     Args:
         asset: An IP address or hostname.
     """
-    classification = classify_exposure(asset)
+    classification = await classify_exposure(asset)
     known = await _backend_get(f"{BACKEND_FINDINGS}/summary", params={"asset": asset})
     if "error" in known:
         classification["known_findings"] = {"available": False, "detail": known["error"]}

@@ -19,6 +19,7 @@ import {
   type RunCreate,
   type RunUpdate,
   type Scan,
+  type ScanScopeCreate,
 } from '@/types'
 
 /**
@@ -65,6 +66,11 @@ export const queryKeys = {
     all: ['scans'] as const,
     list: (limit: number) => ['scans', 'list', limit] as const,
     detail: (id: string) => ['scans', 'detail', id] as const,
+  },
+
+  scanScope: {
+    all: ['scan-scope'] as const,
+    list: (includeRevoked: boolean) => ['scan-scope', 'list', includeRevoked] as const,
   },
 
   messages: {
@@ -264,6 +270,32 @@ export function useRunAgent() {
 
 export function useRunDiscovery() {
   return useMutation({ mutationFn: api.runDiscovery })
+}
+
+/* ----------------------------------------------------------- scan scope */
+
+export function useScanScope(includeRevoked = false) {
+  return useQuery({
+    queryKey: queryKeys.scanScope.list(includeRevoked),
+    queryFn: () => api.fetchScanScope(includeRevoked),
+    staleTime: FRESH_FOR,
+  })
+}
+
+export function useAddScanScope() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: ScanScopeCreate) => api.addScanScope(payload),
+    onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.scanScope.all }),
+  })
+}
+
+export function useRevokeScanScope() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.revokeScanScope(id),
+    onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.scanScope.all }),
+  })
 }
 
 /* ---------------------------------------------------------------- scans */

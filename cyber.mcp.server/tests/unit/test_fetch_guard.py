@@ -58,7 +58,7 @@ def _stub_resolver(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
             return RESOLUTIONS[cleaned]
         return ["93.184.216.34"]
 
-    monkeypatch.setattr(targets_module, "_resolve", resolve)
+    monkeypatch.setattr(targets_module, "resolve_addresses", resolve)
     yield
 
 

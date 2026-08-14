@@ -39,6 +39,15 @@ from cyber_contracts.scan import (
     ScanPort,
     ScanStatus,
 )
+from cyber_contracts.scope import (
+    FORBIDDEN_SCOPE_NETWORKS,
+    MAX_SCOPE_ADDRESSES,
+    ScanScopeCreate,
+    ScanScopeEntry,
+    ScanScopeList,
+    ScanScopeNetworks,
+    normalize_scope_target,
+)
 from cyber_contracts.security import INTERNAL_KEY_HEADER, matches_internal_key
 from cyber_contracts.verification import (
     HostCoverage,
@@ -48,7 +57,9 @@ from cyber_contracts.verification import (
 )
 
 __all__ = [
+    "FORBIDDEN_SCOPE_NETWORKS",
     "INTERNAL_KEY_HEADER",
+    "MAX_SCOPE_ADDRESSES",
     "SEVERITY_ORDER",
     "AgentKind",
     "AuthResults",
@@ -73,6 +84,10 @@ __all__ = [
     "ScanFormat",
     "ScanHost",
     "ScanPort",
+    "ScanScopeCreate",
+    "ScanScopeEntry",
+    "ScanScopeList",
+    "ScanScopeNetworks",
     "ScanStatus",
     "ServicePort",
     "Severity",
@@ -82,6 +97,7 @@ __all__ = [
     "VulnerabilityAnalyzeRequest",
     "WebHost",
     "matches_internal_key",
+    "normalize_scope_target",
 ]
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"

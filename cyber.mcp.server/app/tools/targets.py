@@ -6,7 +6,10 @@ next person to touch either can see that the difference is deliberate:
 ``check_target`` - **scanning.** A tool that runs nmap against a caller-supplied string is
 a scanning proxy. Left open it would let anyone who can reach the MCP port scan the
 internet from this host's address, and "the agent asked me to" is not authorisation. So
-only private, explicitly allowlisted addresses are permitted, and public ones are refused.
+only addresses inside the configured allowlist are permitted, and everything else is
+refused. The default allowlist is the private ranges; putting a client's own servers in
+scope is an explicit act by whoever runs this service, which is where that decision
+belongs.
 
 ``check_fetch_target`` - **phishing link inspection.** Here the danger runs the other way.
 The URL comes from a hostile email, so the risk is that it points *inward*: at loopback, at
@@ -17,15 +20,22 @@ Both default to refusing. They disagree about which direction is dangerous becau
 are protecting against different things - one protects the internet from this host, the
 other protects this host from the internet.
 
-They also differ on DNS, and that is deliberate too:
+Both resolve hostnames, and for the same reason: a name is not a scope decision, an
+address is.
 
-* Scanning does **not** resolve. Resolving a hostname to decide scope hands the decision
-  to whoever controls the DNS answer, and the answer can change between the check and the
-  scan. A hostname is allowed only when explicitly listed.
-* Fetching **must** resolve, because a hostile URL is a hostname whose address is the whole
-  question. So it resolves and checks every address returned, on every redirect hop. The
-  residual gap - the address can change between the check and the connection - is named in
-  ``fetch.py``.
+* Scanning resolves, then requires **every** address the name returned to be inside the
+  configured allowlist, and hands the scanner one of those addresses rather than the name.
+  Resolution therefore cannot widen scope - it can only map a name onto addresses an
+  operator has already authorised - and because the scan targets the vetted address, DNS
+  cannot change the target between the check and the scan.
+
+  This used to refuse hostnames outright, which was safe but wrong for the actual job:
+  a client asks for their server by name, and telling them to look up its address first
+  does not make anything safer. What makes it safe is that the allowlist is still the
+  only gate.
+* Fetching resolves because a hostile URL is a hostname whose address is the whole
+  question. It checks every address returned, on every redirect hop. The residual gap -
+  the address can change between the check and the connection - is named in ``fetch.py``.
 """
 
 from __future__ import annotations
@@ -45,14 +55,36 @@ Network = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 @dataclass(frozen=True, slots=True)
 class TargetDecision:
-    """Whether a target may be scanned, and why not when it may not."""
+    """Whether a target may be scanned, and why not when it may not.
+
+    ``target`` is what the scanner should be given - a vetted address, or a local
+    name that is allowed by name. ``requested`` is what the caller asked for, which
+    differs whenever a hostname was resolved, and is worth reporting back so an
+    operator can see that ``c9.example.com`` became ``203.0.113.10``.
+    """
 
     allowed: bool
     target: str
     reason: str = ""
+    requested: str = ""
+    addresses: tuple[str, ...] = ()
+
+    @property
+    def is_ipv6(self) -> bool:
+        """Does the scanner need to be told to speak IPv6?"""
+        try:
+            return ipaddress.ip_address(self.target).version == 6
+        except ValueError:
+            return False
 
     def as_dict(self) -> dict[str, object]:
-        return {"allowed": self.allowed, "target": self.target, "reason": self.reason}
+        return {
+            "allowed": self.allowed,
+            "target": self.target,
+            "reason": self.reason,
+            "requested": self.requested or self.target,
+            "addresses": list(self.addresses),
+        }
 
 
 def parse_networks(entries: list[str]) -> list[Network]:
@@ -92,36 +124,127 @@ def normalize_target(raw: str) -> str:
     return target
 
 
-def check_target(raw: str, allowed: list[Network]) -> TargetDecision:
-    """Decide whether ``raw`` may be scanned."""
+def _in_scope(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address, allowed: list[Network]
+) -> bool:
+    return any(address in network for network in allowed)
+
+
+def _preferred_address(
+    addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address],
+) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+    """Which address to actually scan when a name returned several.
+
+    IPv4 first: it is what a scanner reaches by default, and a host that answers
+    on both is the same host either way.
+    """
+    for address in addresses:
+        if address.version == 4:
+            return address
+    return addresses[0]
+
+
+def _decide_address(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    allowed: list[Network],
+    *,
+    requested: str,
+) -> TargetDecision:
+    """Apply the allowlist to one literal address."""
+    if _in_scope(address, allowed):
+        return TargetDecision(
+            True, str(address), requested=requested, addresses=(str(address),)
+        )
+    return TargetDecision(
+        False,
+        str(address),
+        f"{address} is outside the configured scan allowlist. Set "
+        "SCAN_ALLOWED_TARGETS to include it if this host is in scope for testing.",
+        requested=requested,
+        addresses=(str(address),),
+    )
+
+
+async def _decide_hostname(host: str, allowed: list[Network]) -> TargetDecision:
+    """Resolve a name and apply the allowlist to every address it returned."""
+    try:
+        resolved = await resolve_addresses(host)
+    except OSError as err:
+        return TargetDecision(False, host, f"{host} did not resolve: {err}", requested=host)
+    if not resolved:
+        return TargetDecision(False, host, f"{host} resolved to no addresses.", requested=host)
+
+    addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for raw_address in resolved:
+        try:
+            addresses.append(ipaddress.ip_address(raw_address))
+        except ValueError:
+            return TargetDecision(
+                False,
+                host,
+                f"{host} resolved to an unreadable address {raw_address!r}.",
+                requested=host,
+                addresses=tuple(resolved),
+            )
+
+    seen = tuple(str(address) for address in addresses)
+    outside = [address for address in addresses if not _in_scope(address, allowed)]
+    if outside:
+        listed = ", ".join(str(address) for address in outside)
+        return TargetDecision(
+            False,
+            host,
+            f"{host} resolves to {listed}, which is outside the configured scan "
+            "allowlist. Every address a name resolves to has to be in scope, because "
+            "which one the scanner reaches is not ours to choose. Set "
+            "SCAN_ALLOWED_TARGETS to include them if this host is in scope for testing.",
+            requested=host,
+            addresses=seen,
+        )
+
+    return TargetDecision(
+        True, str(_preferred_address(addresses)), requested=host, addresses=seen
+    )
+
+
+async def check_target(
+    raw: str, allowed: list[Network], *, resolve: bool = True
+) -> TargetDecision:
+    """Decide whether ``raw`` may be scanned, and what the scanner should be given.
+
+    Args:
+        raw: Whatever the caller supplied - an address, a name, or a URL.
+        allowed: The configured scan allowlist. This is the only gate; resolution
+            does not widen it.
+        resolve: Look up hostnames. Turning this off restores the older behaviour
+            of refusing every name, for a deployment that wants addresses only.
+    """
     target = normalize_target(raw)
     if not target:
         return TargetDecision(False, raw, "No target was supplied.")
 
     lowered = target.lower()
     if lowered in _LOCAL_HOSTNAMES or lowered.endswith(_LOCAL_SUFFIXES):
-        return TargetDecision(True, target, "")
+        # Allowed by name, and deliberately not resolved: these names mean "this
+        # machine or this network" by definition, and several of them (.internal,
+        # .local) commonly do not resolve at all.
+        return TargetDecision(True, target, requested=target)
 
     try:
         address = ipaddress.ip_address(target)
     except ValueError:
-        return TargetDecision(
-            False,
-            target,
-            f"{target!r} is a hostname. Only IP addresses inside the configured scan "
-            "allowlist, and explicitly local names, can be scanned - resolving a name "
-            "to decide scope would let DNS choose the target.",
-        )
+        if not resolve:
+            return TargetDecision(
+                False,
+                target,
+                f"{target!r} is a hostname and hostname resolution is disabled on this "
+                "server. Supply an IP address inside the configured scan allowlist, or "
+                "set SCAN_RESOLVE_HOSTNAMES=true.",
+                requested=target,
+            )
+        return await _decide_hostname(target, allowed)
 
-    if any(address in network for network in allowed):
-        return TargetDecision(True, str(address), "")
-
-    return TargetDecision(
-        False,
-        str(address),
-        f"{address} is outside the configured scan allowlist. Set "
-        "SCAN_ALLOWED_TARGETS to include it if this host is in scope for testing.",
-    )
+    return _decide_address(address, allowed, requested=target)
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +305,7 @@ def _is_forbidden_for_fetch(address: ipaddress.IPv4Address | ipaddress.IPv6Addre
     return ""
 
 
-async def _resolve(host: str) -> list[str]:
+async def resolve_addresses(host: str) -> list[str]:
     """Every address ``host`` currently resolves to.
 
     Uses the loop's executor rather than blocking it. An IP literal short-circuits, so a
@@ -249,7 +372,7 @@ async def check_fetch_target(raw: str) -> FetchDecision:
         )
 
     try:
-        addresses = await _resolve(host)
+        addresses = await resolve_addresses(host)
     except OSError as err:
         return FetchDecision(False, host, reason=f"{host} did not resolve: {err}")
 

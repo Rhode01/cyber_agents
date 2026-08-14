@@ -8,5 +8,6 @@ from app.models.finding import Finding
 from app.models.message import Message
 from app.models.run import Run
 from app.models.scan import Scan
+from app.models.scope import ScanScope
 
-__all__ = ["Finding", "Message", "Run", "Scan"]
+__all__ = ["Finding", "Message", "Run", "Scan", "ScanScope"]

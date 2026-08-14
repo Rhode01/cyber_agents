@@ -341,10 +341,36 @@ whole UI with it - its exposed routes are guarded per route instead. Setting a k
 locally turns enforcement on everywhere, which is the way to exercise the
 production path before deploying it.
 
-Scanning is allowlisted. `SCAN_ALLOWED_TARGETS` bounds what the MCP scan tools
-will touch, defaulting to loopback plus the private ranges; anything outside is
-refused before the scanner starts. Hostnames are never resolved to decide scope,
-because that hands the decision to whoever controls the DNS answer.
+Scanning is allowlisted, and the allowlist comes from two places that answer
+different questions:
+
+* **`SCAN_ALLOWED_TARGETS`** - what is true of the deployment: loopback and the
+  private ranges the stack runs on. Never fetched, so it keeps working when the
+  backend is down.
+* **The `scan_scope` table**, managed from **Configure → Scan scope** in the UI -
+  what an operator authorised for a client. Changes without a redeploy, which is
+  the point: a platform whose scope lives in an env var does not scale past the
+  first client.
+
+The two are unioned; neither can override the other. Anything outside both is
+refused before the scanner starts, and a backend the MCP server cannot reach
+contributes nothing - so an outage refuses scans of client hosts rather than
+permitting them on the strength of a list nobody could read.
+
+Hostnames **are** resolved, and this does not widen anything. A name is resolved,
+every address it returns must be in the allowlist, and the scanner is handed the
+vetted address rather than the name - so DNS cannot change the target between the
+check and the scan. Refusing names outright, as this used to, was safe but wrong
+for the job: a client names their server, and making them look its address up
+first makes nothing safer. Set `SCAN_RESOLVE_HOSTNAMES=false` to restore the old
+behaviour.
+
+Adding scope is an attestation. `authorized_by` is required and recorded against
+the entry; revoking sets a flag rather than deleting the row, so "who said we
+could scan this" survives the withdrawal. A single entry may not exceed a /16, and
+the link-local range that holds the cloud metadata endpoint can never be added at
+all - that address reads this platform's own credentials, and no client
+authorisation covers it.
 
 Email integration was removed during the restructure - it stored OAuth secrets and
 refresh tokens as plaintext rows served over an unauthenticated `GET`. Credentials

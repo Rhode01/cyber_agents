@@ -17,6 +17,7 @@ from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.messages import router as messages_router
 from app.api.v1.endpoints.runs import router as runs_router
 from app.api.v1.endpoints.scans import router as scans_router
+from app.api.v1.endpoints.scope import router as scope_router
 from app.api.v1.endpoints.system import router as system_router
 
 api_router = APIRouter()
@@ -27,6 +28,7 @@ api_router.include_router(findings_router)
 api_router.include_router(agents_router)
 api_router.include_router(runs_router)
 api_router.include_router(discovery_router)
+api_router.include_router(scope_router)
 api_router.include_router(system_router)
 
 __all__ = ["api_router"]

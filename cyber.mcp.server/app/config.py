@@ -58,7 +58,37 @@ class Settings(BaseSettings):
             "fc00::/7",
         ]
     )
-    scan_timeout_seconds: float = Field(default=120.0, gt=0)
+    scan_resolve_hostnames: bool = Field(
+        default=True,
+        description=(
+            "Resolve a hostname target and apply the allowlist to every address it "
+            "returns. This cannot widen scope - the allowlist is still the only gate - "
+            "it just means a client can name their server instead of looking its "
+            "address up first. Set false to refuse names outright."
+        ),
+    )
+    # Two timeouts, and the order between them matters. `scan_host_timeout_seconds`
+    # is nmap's own graceful give-up: it stops probing and writes the XML it has.
+    # `scan_timeout_seconds` is our hard kill, which produces *no* output at all.
+    # The first must be comfortably smaller than the second, or a slow host yields
+    # nothing rather than partial results - the validator below enforces it.
+    #
+    # Both defaults are sized for a real remote host rather than for loopback. A
+    # `-Pn -sV` sweep across the internet is minutes, not the seconds it takes
+    # against a service on the same machine.
+    scan_timeout_seconds: float = Field(default=240.0, gt=0)
+    scan_host_timeout_seconds: float = Field(
+        default=180.0,
+        gt=0,
+        description="Passed to nmap as --host-timeout, so a slow host degrades to partial results.",
+    )
+    scan_timing_template: Literal["T0", "T1", "T2", "T3", "T4", "T5"] = Field(
+        default="T4",
+        description=(
+            "nmap timing template. T4 is the usual choice for a responsive network; "
+            "drop to T2/T3 for a fragile target or a link that drops probes."
+        ),
+    )
     scan_nmap_path: str = Field(
         default="nmap",
         description=(
@@ -104,6 +134,24 @@ class Settings(BaseSettings):
     @classmethod
     def _strip_trailing_slash(cls, value: str) -> str:
         return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def _host_timeout_must_leave_room_to_write_output(self) -> Settings:
+        """nmap has to give up before we kill it, or a slow scan returns nothing.
+
+        Refused at startup rather than per-scan: the symptom of getting this wrong
+        is an empty result on exactly the hosts that most needed scanning, which
+        reads as "the host is clean" instead of "the scan was cut off".
+        """
+        if self.scan_host_timeout_seconds >= self.scan_timeout_seconds:
+            msg = (
+                f"SCAN_HOST_TIMEOUT_SECONDS ({self.scan_host_timeout_seconds:g}) must be "
+                f"less than SCAN_TIMEOUT_SECONDS ({self.scan_timeout_seconds:g}). The "
+                "first lets nmap stop and write partial results; the second kills it "
+                "and discards everything."
+            )
+            raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def _require_internal_key_outside_local(self) -> Settings:

@@ -22,7 +22,7 @@ from app.models.scan import Scan as ScanModel
 
 # tests/unit/ -> tests/ -> the module root
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-HEAD_REVISION = "0007"
+HEAD_REVISION = "0008"
 
 
 def _config() -> Config:
@@ -51,7 +51,7 @@ def test_the_revision_chain_is_linear_and_rooted() -> None:
     # the restructure: the first stored plaintext secrets, and the second called
     # jsonb_typeof() on a column 0002 already creates as text[], which fails on
     # any fresh database. The runs migrations were renumbered to close the gap.
-    expected = ["0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    expected = ["0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
     assert [r.revision for r in revisions] == expected
     assert revisions[-1].down_revision is None
     # Derived from `expected` rather than hardcoded: this assertion previously
